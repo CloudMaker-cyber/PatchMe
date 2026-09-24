@@ -1,0 +1,26 @@
+:root {
+  --color-text: #3d3a34;
+  --color-text-muted: #8a857d;
+  --color-border: #e8e2d9;
+  --color-bg: #faf7f2;
+  --color-surface: #ffffff;
+  --color-primary: #b6895a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.6;
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}

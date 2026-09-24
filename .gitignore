@@ -1,0 +1,27 @@
+# 密钥与本地环境（绝不提交）
+.env
+.env.*
+!.env.example
+application-local.yml
+
+# Java / Maven
+target/
+*.class
+*.jar
+
+# Node
+node_modules/
+dist/
+*.local
+npm-debug.log*
+
+# 日志与数据
+logs/
+*.log
+
+# IDE 与操作系统
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

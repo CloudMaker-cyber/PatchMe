@@ -1,0 +1,9 @@
+# 测试环境配置：排除数据源自动配置，使 mvn test 不依赖本地 MySQL。
+# 上下文加载与 Web 层切片测试足以覆盖任务 0 的统一响应/异常框架。
+spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+
+app:
+  cors:
+    allowed-origins: http://localhost:5173
