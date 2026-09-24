@@ -5,9 +5,10 @@ export type IdentityMode = 'ANONYMOUS' | 'PUBLIC'
 export type Intent = 'VENT' | 'ADVICE' | 'COMPANION'
 
 /**
- * 作者展示对象 —— 完全模拟后端 PublicPostVO 的 author 字段规则：
+/**
+ * 作者展示对象 —— 与后端 AuthorView 的序列化结果一一对应：
  * 匿名内容只可能是 { mode: 'anonymous' }，不存在任何可反推身份的字段。
- * 真实归属放在 mock/internal.ts，普通视图代码接触不到。
+ * （真实归属只在数据库与 Service 层，API 出口由 src/api 的白名单 VO 收口。）
  */
 export type AuthorInfo =
   | { mode: 'anonymous' }

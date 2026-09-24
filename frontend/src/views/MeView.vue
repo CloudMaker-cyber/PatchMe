@@ -2,13 +2,16 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { Post, Reply } from '@/types'
-import { fetchMine } from '@/mock/api'
+import { fetchMine } from '@/api'
+import { useAuthStore } from '@/stores/auth'
+import { useDictStore } from '@/stores/dicts'
 import { relativeTime } from '@/utils/time'
 import AuthorDisplay from '@/components/AuthorDisplay.vue'
 import PostCard from '@/components/PostCard.vue'
 
 type Tab = 'posts' | 'replies' | 'bookmarks'
 
+const auth = useAuthStore()
 const tab = ref<Tab>('posts')
 const loading = ref(true)
 const myPosts = ref<Post[]>([])
@@ -16,7 +19,13 @@ const myReplies = ref<Reply[]>([])
 const bookmarks = ref<Post[]>([])
 
 onMounted(async () => {
-  const data = await fetchMine()
+  void useDictStore().ensureLoaded()
+  await auth.ensureLoaded()
+  if (!auth.user) {
+    loading.value = false
+    return
+  }
+  const data = await fetchMine({ username: auth.user.username, nickname: auth.user.nickname })
   myPosts.value = data.posts
   myReplies.value = data.replies
   bookmarks.value = data.bookmarks
@@ -29,8 +38,8 @@ onMounted(async () => {
     <header class="me__header card">
       <h1>我的</h1>
       <p class="muted">
-        当前模拟登录：小满（u_lin）。任务 2 起这里将是真实 JWT 登录态；本页内容仅本人可见，
-        所以能看到自己以匿名身份发布的内容。
+        当前登录：{{ auth.user?.nickname }}（@{{ auth.user?.username }}）。
+        本页内容仅本人可见，所以能看到自己以匿名身份发布的内容。
       </p>
     </header>
 

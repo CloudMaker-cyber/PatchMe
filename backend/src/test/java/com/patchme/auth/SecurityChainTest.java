@@ -3,6 +3,7 @@ package com.patchme.auth;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -22,6 +23,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -71,6 +73,16 @@ class SecurityChainTest {
             return "ok";
         }
 
+        @GetMapping("/api/dicts")
+        public String dicts() {
+            return "ok";
+        }
+
+        @PatchMapping("/api/posts/{id}/comments")
+        public String closeComments() {
+            return "ok";
+        }
+
         @GetMapping("/api/admin/ping")
         public String adminPing() {
             return "ok";
@@ -95,6 +107,7 @@ class SecurityChainTest {
         mockMvc.perform(get("/api/health")).andExpect(status().isOk());
         mockMvc.perform(get("/api/posts")).andExpect(status().isOk());
         mockMvc.perform(get("/api/users/xiaoman")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/dicts")).andExpect(status().isOk());
     }
 
     @Test
@@ -104,6 +117,10 @@ class SecurityChainTest {
                 .andExpect(jsonPath("$.code").value("40100"));
         // 公开只读仅限 GET：游客发帖必须被拒
         mockMvc.perform(post("/api/posts"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        // 楼主操作（PATCH）也必须登录
+        mockMvc.perform(patch("/api/posts/1/comments"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("40100"));
     }

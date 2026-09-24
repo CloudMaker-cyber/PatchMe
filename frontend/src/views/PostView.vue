@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { IdentityMode, Intent } from '@/types'
-import { intentOptions, majors, schools, tags } from '@/mock/dictionaries'
-import { createPost } from '@/mock/api'
+import { intentOptions } from '@/utils/dict'
+import { ApiError, createPost } from '@/api'
+import { useDictStore } from '@/stores/dicts'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const dicts = useDictStore()
+const auth = useAuthStore()
+
+onMounted(() => void dicts.ensureLoaded())
 
 const intent = ref<Intent | ''>('')
 const body = ref('')
@@ -16,6 +22,7 @@ const tagIds = ref<string[]>([])
 /** 首次默认匿名（docs/v3/01） */
 const identity = ref<IdentityMode>('ANONYMOUS')
 const submitting = ref(false)
+const submitError = ref('')
 
 const errors = computed(() => {
   const e: string[] = []
@@ -37,16 +44,23 @@ function toggleTag(id: string) {
 async function submit() {
   if (errors.value.length || submitting.value) return
   submitting.value = true
-  const id = await createPost({
-    intent: intent.value as Intent,
-    title: title.value,
-    body: body.value,
-    schoolId: schoolId.value || null,
-    majorId: majorId.value || null,
-    tagIds: tagIds.value,
-    identityMode: identity.value,
-  })
-  void router.push(`/posts/${id}`)
+  submitError.value = ''
+  try {
+    const id = await createPost({
+      intent: intent.value as Intent,
+      title: title.value,
+      body: body.value,
+      schoolId: schoolId.value || null,
+      majorId: majorId.value || null,
+      tagIds: tagIds.value,
+      identityMode: identity.value,
+    })
+    void router.push(`/posts/${id}`)
+  } catch (e) {
+    if (auth.requireLogin(router, e)) return
+    submitError.value = e instanceof ApiError ? e.message : '发布失败，请稍后重试'
+    submitting.value = false
+  }
 }
 </script>
 
@@ -54,7 +68,7 @@ async function submit() {
   <section class="card create">
     <h1>发帖</h1>
     <p class="muted create__tip">
-      说出你的困扰。其他用户会看到你的内容——{{ identity === 'ANONYMOUS' ? '以“匿名”身份' : '以“小满”公开身份' }}。
+      说出你的困扰。其他用户会看到你的内容——{{ identity === 'ANONYMOUS' ? '以“匿名”身份' : `以“${auth.user?.nickname ?? ''}”公开身份` }}。
     </p>
 
     <fieldset class="create__group">
@@ -84,14 +98,14 @@ async function submit() {
         <span>学校（可选，仅用于他人筛选）</span>
         <select v-model="schoolId">
           <option value="">不显示</option>
-          <option v-for="s in schools" :key="s.id" :value="s.id">{{ s.name }}</option>
+          <option v-for="s in dicts.schools" :key="s.id" :value="s.id">{{ s.name }}</option>
         </select>
       </label>
       <label class="create__group create__group--half">
         <span>专业方向（可选）</span>
         <select v-model="majorId">
           <option value="">不限</option>
-          <option v-for="m in majors" :key="m.id" :value="m.id">{{ m.name }}</option>
+          <option v-for="m in dicts.majors" :key="m.id" :value="m.id">{{ m.name }}</option>
         </select>
       </label>
     </div>
@@ -99,7 +113,7 @@ async function submit() {
     <fieldset class="create__group">
       <legend>话题标签（可选，最多 3 个）</legend>
       <button
-        v-for="t in tags"
+        v-for="t in dicts.tags"
         :key="t.id"
         type="button"
         class="chip"
@@ -116,13 +130,14 @@ async function submit() {
       </label>
       <label class="create__radio">
         <input v-model="identity" type="radio" value="PUBLIC" />
-        <span>公开昵称“小满”（可进入我的公开主页）</span>
+        <span>公开昵称“{{ auth.user?.nickname ?? '' }}”（可进入我的公开主页）</span>
       </label>
     </fieldset>
 
     <ul v-if="errors.length" class="create__errors">
       <li v-for="e in errors" :key="e">{{ e }}</li>
     </ul>
+    <p v-if="submitError" class="create__errors">{{ submitError }}</p>
 
     <button class="btn btn--primary create__submit" :disabled="!!errors.length || submitting" @click="submit">
       {{ submitting ? '发布中…' : '发布' }}

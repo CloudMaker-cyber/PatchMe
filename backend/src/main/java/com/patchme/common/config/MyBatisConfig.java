@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
  */
 @Configuration
 @EnableTransactionManagement
-@MapperScan("com.patchme.**.mapper")
+// dict 包的三个字典 Mapper 与实体同包，必须显式列入扫描路径
+@MapperScan({"com.patchme.**.mapper", "com.patchme.dict"})
 public class MyBatisConfig {
 }

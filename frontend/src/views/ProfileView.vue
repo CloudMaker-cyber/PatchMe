@@ -2,7 +2,7 @@
 import { computed, ref, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import type { Post, ProfileSummary, Reply } from '@/types'
-import { fetchProfile } from '@/mock/api'
+import { fetchProfile } from '@/api'
 import { relativeTime } from '@/utils/time'
 import PostCard from '@/components/PostCard.vue'
 
@@ -60,8 +60,10 @@ const empty = computed(() =>
       </div>
 
       <template v-if="!empty">
-        <PostCard v-for="p in profilePosts" :key="p.id" :post="p" />
-        <ul v-if="tab === 'replies'" class="profile__reply-list">
+        <template v-if="tab === 'posts'">
+          <PostCard v-for="p in profilePosts" :key="p.id" :post="p" />
+        </template>
+        <ul v-else class="profile__reply-list">
           <li v-for="r in profileReplies" :key="r.id" class="card profile__reply">
             <RouterLink :to="`/posts/${r.postId}`" class="profile__reply-link">回到原帖 →</RouterLink>
             <p class="muted">{{ relativeTime(r.createdAt) }}</p>

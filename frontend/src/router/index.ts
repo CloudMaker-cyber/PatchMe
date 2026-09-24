@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -13,6 +14,7 @@ const router = createRouter({
       path: '/post',
       name: 'post',
       component: () => import('../views/PostView.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/posts/:id',
@@ -28,8 +30,28 @@ const router = createRouter({
       path: '/me',
       name: 'me',
       component: () => import('../views/MeView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('../views/LoginView.vue'),
+    },
+    {
+      path: '/register',
+      name: 'register',
+      component: () => import('../views/RegisterView.vue'),
     },
   ],
+})
+
+// 需要登录的页面：先等 /api/me 回来再判定；未登录跳登录页并带回跳地址。
+router.beforeEach(async (to) => {
+  if (!to.meta.requiresAuth) return true
+  const auth = useAuthStore()
+  await auth.ensureLoaded()
+  if (auth.isLoggedIn) return true
+  return { path: '/login', query: { redirect: to.fullPath } }
 })
 
 export default router

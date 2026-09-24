@@ -1,31 +1,31 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref, watchEffect } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { IdentityMode, PostDetail } from '@/types'
-import {
-  createReply,
-  fetchPostDetail,
-  setCommentsClosed,
-  toggleBookmark,
-  toggleHelpful,
-  toggleSupport,
-} from '@/mock/api'
-import { intentLabels, tags as allTags, dictName } from '@/mock/dictionaries'
+import { ApiError, fetchPostDetail, setHelpful, createReply, setCommentsClosed, toggleBookmark, toggleSupport } from '@/api'
+import { intentLabels } from '@/utils/dict'
+import { useDictStore } from '@/stores/dicts'
+import { useAuthStore } from '@/stores/auth'
 import { relativeTime } from '@/utils/time'
 import AuthorDisplay from '@/components/AuthorDisplay.vue'
 import ReplyItem from '@/components/ReplyItem.vue'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const dicts = useDictStore()
+
 const detail = ref<PostDetail | null>(null)
 const loading = ref(true)
 const notFound = ref(false)
+const actionError = ref('')
 
 const replyBody = ref('')
 const replyIdentity = ref<IdentityMode>('ANONYMOUS')
 
 const post = computed(() => detail.value?.post ?? null)
 const tagNames = computed(() =>
-  (post.value?.tagIds ?? []).map((id) => dictName(allTags, id)).filter((n): n is string => !!n),
+  (post.value?.tagIds ?? []).map((id) => dicts.nameOf(dicts.tags, id)).filter((n): n is string => !!n),
 )
 const replyValid = computed(() => {
   const b = replyBody.value.trim()
@@ -42,35 +42,63 @@ async function load() {
 }
 
 watchEffect(load)
+onMounted(() => void dicts.ensureLoaded())
+
+/** 写操作失败统一处理：401 跳登录，其余展示后端安全文案 */
+function onActionError(e: unknown) {
+  if (auth.requireLogin(router, e)) return
+  actionError.value = e instanceof ApiError ? e.message : '操作失败，请稍后重试'
+}
 
 async function onToggleHelpful(replyId: string) {
-  if (!post.value) return
-  await toggleHelpful(post.value.id, replyId)
-  await load()
+  if (!post.value || !detail.value) return
+  const target = detail.value.replies.find((r) => r.id === replyId)
+  try {
+    await setHelpful(post.value.id, replyId, !(target?.isHelpful ?? false))
+    await load()
+  } catch (e) {
+    onActionError(e)
+  }
 }
 
 async function onToggleClosed() {
   if (!post.value) return
-  await setCommentsClosed(post.value.id, !post.value.commentsClosed)
-  await load()
+  try {
+    await setCommentsClosed(post.value.id, !post.value.commentsClosed)
+    await load()
+  } catch (e) {
+    onActionError(e)
+  }
 }
 
 async function onSupport() {
   if (!detail.value) return
-  detail.value.supportedByMe = !detail.value.supportedByMe
-  detail.value.post.supportCount = await toggleSupport(detail.value.post.id)
+  try {
+    detail.value.post.supportCount = await toggleSupport(detail.value.post.id)
+    detail.value.supportedByMe = !detail.value.supportedByMe
+  } catch (e) {
+    onActionError(e)
+  }
 }
 
 async function onBookmark() {
   if (!detail.value) return
-  detail.value.bookmarkedByMe = await toggleBookmark(detail.value.post.id)
+  try {
+    detail.value.bookmarkedByMe = await toggleBookmark(detail.value.post.id)
+  } catch (e) {
+    onActionError(e)
+  }
 }
 
 async function onReply() {
   if (!post.value || !replyValid.value) return
-  await createReply(post.value.id, replyBody.value, replyIdentity.value)
-  replyBody.value = ''
-  await load()
+  try {
+    await createReply(post.value.id, replyBody.value, replyIdentity.value)
+    replyBody.value = ''
+    await load()
+  } catch (e) {
+    onActionError(e)
+  }
 }
 </script>
 
@@ -83,6 +111,7 @@ async function onReply() {
     </p>
 
     <template v-else-if="post && detail">
+      <p v-if="actionError" class="detail__error" @click="actionError = ''">{{ actionError }}</p>
       <article class="card">
         <div class="detail__meta">
           <span class="badge badge--advice" :class="{
@@ -141,7 +170,7 @@ async function onReply() {
             </label>
             <label class="detail__radio">
               <input v-model="replyIdentity" type="radio" value="PUBLIC" />
-              <span>公开昵称“小满”</span>
+              <span>公开昵称“{{ auth.user?.nickname ?? '登录后可选' }}”</span>
             </label>
             <button class="btn btn--primary" :disabled="!replyValid" @click="onReply">回复</button>
           </div>
@@ -202,6 +231,15 @@ async function onReply() {
 
 .detail__replies {
   margin-top: 1rem;
+}
+
+.detail__error {
+  background: #fdecea;
+  color: #c62828;
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 
 .detail__replies h2 {

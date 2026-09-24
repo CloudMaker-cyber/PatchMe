@@ -1,5 +1,13 @@
 package com.patchme;
 
+import com.patchme.dict.MajorMapper;
+import com.patchme.dict.SchoolMapper;
+import com.patchme.dict.TagMapper;
+import com.patchme.interaction.mapper.BookmarkMapper;
+import com.patchme.interaction.mapper.PostSupportMapper;
+import com.patchme.post.mapper.PostMapper;
+import com.patchme.post.mapper.PostTagMapper;
+import com.patchme.reply.mapper.ReplyMapper;
 import com.patchme.user.mapper.UserMapper;
 import com.patchme.user.mapper.UserProfileMapper;
 import com.patchme.user.mapper.UserSettingsMapper;
@@ -22,6 +30,30 @@ class PatchMeApplicationTests {
 
     @MockitoBean
     private UserSettingsMapper userSettingsMapper;
+
+    @MockitoBean
+    private PostMapper postMapper;
+
+    @MockitoBean
+    private PostTagMapper postTagMapper;
+
+    @MockitoBean
+    private ReplyMapper replyMapper;
+
+    @MockitoBean
+    private PostSupportMapper postSupportMapper;
+
+    @MockitoBean
+    private BookmarkMapper bookmarkMapper;
+
+    @MockitoBean
+    private SchoolMapper schoolMapper;
+
+    @MockitoBean
+    private MajorMapper majorMapper;
+
+    @MockitoBean
+    private TagMapper tagMapper;
 
     @Test
     void contextLoads() {

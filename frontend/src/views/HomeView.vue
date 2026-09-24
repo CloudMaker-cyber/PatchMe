@@ -2,7 +2,8 @@
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Post } from '@/types'
-import { fetchFeed, fetchResolved } from '@/mock/api'
+import { fetchFeed, fetchResolved } from '@/api'
+import { useDictStore } from '@/stores/dicts'
 import { useFeedFilterStore } from '@/stores/feedFilters'
 import FilterBar from '@/components/FilterBar.vue'
 import PostCard from '@/components/PostCard.vue'
@@ -39,6 +40,7 @@ function syncUrlAndReload() {
 }
 
 onMounted(() => {
+  void useDictStore().ensureLoaded()
   filters.restoreFromQuery(route.query as Record<string, string | string[] | undefined>)
   void reload()
 })

@@ -2,14 +2,16 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { FeedStatus, Post } from '@/types'
-import { intentLabels, tags as allTags, dictName } from '@/mock/dictionaries'
+import { intentLabels } from '@/utils/dict'
+import { useDictStore } from '@/stores/dicts'
 import { relativeTime } from '@/utils/time'
 import AuthorDisplay from './AuthorDisplay.vue'
 
 const props = defineProps<{ post: Post; status?: FeedStatus }>()
+const dicts = useDictStore()
 
 const tagNames = computed(() =>
-  props.post.tagIds.map((id) => dictName(allTags, id)).filter((n): n is string => !!n),
+  props.post.tagIds.map((id) => dicts.nameOf(dicts.tags, id)).filter((n): n is string => !!n),
 )
 const excerpt = computed(() =>
   props.post.body.length > 88 ? props.post.body.slice(0, 88) + '…' : props.post.body,

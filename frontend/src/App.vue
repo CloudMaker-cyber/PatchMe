@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+const router = useRouter()
+
+async function onLogout() {
+  await auth.logout()
+  void router.push('/')
+}
 </script>
 
 <template>
@@ -9,7 +18,15 @@ import { RouterLink, RouterView } from 'vue-router'
       <nav class="app-header__nav">
         <RouterLink to="/">首页</RouterLink>
         <RouterLink to="/post">发帖</RouterLink>
-        <RouterLink to="/me">我的</RouterLink>
+        <template v-if="auth.isLoggedIn && auth.user">
+          <RouterLink :to="`/u/${auth.user.username}`">{{ auth.user.nickname }}</RouterLink>
+          <RouterLink to="/me">我的</RouterLink>
+          <a href="#" @click.prevent="onLogout">退出</a>
+        </template>
+        <template v-else>
+          <RouterLink to="/login">登录</RouterLink>
+          <RouterLink to="/register">注册</RouterLink>
+        </template>
       </nav>
     </div>
   </header>

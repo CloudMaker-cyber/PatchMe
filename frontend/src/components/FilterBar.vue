@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { intentOptions, majors, schools, tags } from '@/mock/dictionaries'
+import { intentOptions } from '@/utils/dict'
+import { useDictStore } from '@/stores/dicts'
 import { useFeedFilterStore } from '@/stores/feedFilters'
 import type { Intent } from '@/types'
 
@@ -9,6 +10,7 @@ import type { Intent } from '@/types'
  */
 const emit = defineEmits<{ change: [] }>()
 const filters = useFeedFilterStore()
+const dicts = useDictStore()
 
 function toggleTag(id: string) {
   const idx = filters.tags.indexOf(id)
@@ -43,11 +45,11 @@ function reset() {
     <div class="filter-bar__row">
       <select :value="filters.school ?? ''" @change="setSchool" aria-label="按学校筛选">
         <option value="">全部学校</option>
-        <option v-for="s in schools" :key="s.id" :value="s.id">{{ s.name }}</option>
+        <option v-for="s in dicts.schools" :key="s.id" :value="s.id">{{ s.name }}</option>
       </select>
       <select :value="filters.major ?? ''" @change="setMajor" aria-label="按专业方向筛选">
         <option value="">全部专业方向</option>
-        <option v-for="m in majors" :key="m.id" :value="m.id">{{ m.name }}</option>
+        <option v-for="m in dicts.majors" :key="m.id" :value="m.id">{{ m.name }}</option>
       </select>
       <button v-if="filters.hasAny()" class="btn filter-bar__reset" @click="reset">清空筛选</button>
     </div>
@@ -65,7 +67,7 @@ function reset() {
 
     <div class="filter-bar__row filter-bar__tags">
       <button
-        v-for="t in tags"
+        v-for="t in dicts.tags"
         :key="t.id"
         type="button"
         class="chip"
