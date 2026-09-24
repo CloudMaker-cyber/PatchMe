@@ -1,57 +1,89 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { fetchHealth } from '@/api/health'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import type { Post } from '@/types'
+import { fetchFeed, fetchResolved } from '@/mock/api'
+import { useFeedFilterStore } from '@/stores/feedFilters'
+import FilterBar from '@/components/FilterBar.vue'
+import PostCard from '@/components/PostCard.vue'
 
-type HealthState = 'checking' | 'up' | 'down'
+const route = useRoute()
+const router = useRouter()
+const filters = useFeedFilterStore()
 
-const health = ref<HealthState>('checking')
+const feed = ref<Post[]>([])
+const resolved = ref<Post[]>([])
+const showResolved = ref(false)
+const loading = ref(true)
 
-onMounted(async () => {
-  try {
-    const data = await fetchHealth()
-    health.value = data.status === 'UP' ? 'up' : 'down'
-  } catch {
-    health.value = 'down'
-  }
+function queryOf() {
+  const q: Record<string, string | string[]> = {}
+  if (filters.school) q.school = filters.school
+  if (filters.major) q.major = filters.major
+  if (filters.intent) q.intent = filters.intent
+  if (filters.tags.length) q.tags = [...filters.tags]
+  return q
+}
+
+async function reload() {
+  loading.value = true
+  const f = filters.current()
+  feed.value = await fetchFeed(f)
+  resolved.value = await fetchResolved(f)
+  loading.value = false
+}
+
+function syncUrlAndReload() {
+  router.replace({ path: '/', query: queryOf() })
+  void reload()
+}
+
+onMounted(() => {
+  filters.restoreFromQuery(route.query as Record<string, string | string[] | undefined>)
+  void reload()
 })
+
+// 浏览器前进/后退时从 URL 恢复筛选
+watch(
+  () => route.query,
+  (q) => {
+    if (route.path !== '/') return
+    if (filters.restoreFromQuery(q as Record<string, string | string[] | undefined>)) void reload()
+  },
+)
 </script>
 
 <template>
-  <section class="placeholder">
-    <h1>首页 · 待回答流</h1>
-    <p class="placeholder__note">任务 1 将实现真实列表与筛选，当前为工程基线占位页。</p>
-    <p class="placeholder__health">
-      后端健康检查：
-      <strong v-if="health === 'checking'">检测中…</strong>
-      <strong v-else-if="health === 'up'" class="is-up">已连接（UP）</strong>
-      <strong v-else class="is-down">未连接（请确认后端已在 8080 端口启动）</strong>
-    </p>
-  </section>
+  <div>
+    <FilterBar @change="syncUrlAndReload" />
+
+    <p v-if="loading" class="empty">加载中…</p>
+    <template v-else>
+      <PostCard v-for="p in feed" :key="p.id" :post="p" :status="p.replyCount === 0 ? 'UNANSWERED' : 'NEED_HELP'" />
+      <p v-if="feed.length === 0" class="empty">
+        没有符合条件的待回答内容。<br />换个筛选，或者<a href="/post">发第一帖</a>。
+      </p>
+    </template>
+
+    <section v-if="resolved.length" class="resolved">
+      <button class="btn resolved__toggle" @click="showResolved = !showResolved">
+        {{ showResolved ? '收起' : '查看' }}已获得帮助（{{ resolved.length }}）
+      </button>
+      <template v-if="showResolved">
+        <PostCard v-for="p in resolved" :key="p.id" :post="p" />
+      </template>
+    </section>
+  </div>
 </template>
 
 <style scoped>
-.placeholder {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 1.5rem;
+.resolved {
+  margin-top: 1.2rem;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 0.9rem;
 }
 
-.placeholder h1 {
-  margin-top: 0;
-  font-size: 1.25rem;
-}
-
-.placeholder__note,
-.placeholder__health {
-  color: var(--color-text-muted);
-}
-
-.is-up {
-  color: #2e7d32;
-}
-
-.is-down {
-  color: #c62828;
+.resolved__toggle {
+  margin-bottom: 0.8rem;
 }
 </style>

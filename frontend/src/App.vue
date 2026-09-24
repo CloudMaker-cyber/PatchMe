@@ -23,6 +23,8 @@ import { RouterLink, RouterView } from 'vue-router'
 .app-header {
   position: sticky;
   top: 0;
+  /* 卡片 stretched-link 的 ::after 覆盖层会随滚动压到导航上，必须抬高层级 */
+  z-index: 10;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }

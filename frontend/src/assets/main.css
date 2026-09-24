@@ -24,3 +24,102 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* ---- 共享原子类（用户端自定义样式，不依赖组件库） ---- */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+}
+
+.btn {
+  display: inline-block;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: 8px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  color: #fff;
+  filter: brightness(1.05);
+}
+
+.chip {
+  display: inline-block;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.1rem 0.65rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.chip--active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: #f6efe6;
+}
+
+.badge {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 0 0.45rem;
+  font-size: 0.75rem;
+  line-height: 1.5rem;
+}
+
+.badge--vent { background: #eef3fb; color: #4a6fa5; }
+.badge--advice { background: #fbf3e6; color: #b6895a; }
+.badge--companion { background: #ecf6ec; color: #4d8053; }
+.badge--unanswered { background: #fdeeee; color: #c62828; }
+.badge--needhelp { background: #fff7e8; color: #a06b17; }
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  padding: 2.5rem 0;
+}
+
+.identity--anon {
+  color: var(--color-text-muted);
+  background: #f1ede6;
+  border-radius: 6px;
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+}
+
+.author-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 600;
+  position: relative;
+  z-index: 1;
+}
