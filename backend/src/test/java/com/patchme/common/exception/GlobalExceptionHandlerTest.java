@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -24,8 +25,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 验证全局异常处理：业务异常、参数校验失败、未知异常均收敛为统一 ApiResponse，
  * 且不向前端泄露内部细节。
  */
-@WebMvcTest
-@Import(GlobalExceptionHandlerTest.TestController.class)
+@WebMvcTest(controllers = GlobalExceptionHandlerTest.TestController.class)
+@AutoConfigureMockMvc(addFilters = false)
+@Import({GlobalExceptionHandler.class, GlobalExceptionHandlerTest.TestController.class})
 class GlobalExceptionHandlerTest {
 
     @Autowired

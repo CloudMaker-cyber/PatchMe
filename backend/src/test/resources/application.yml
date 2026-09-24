@@ -7,3 +7,7 @@ spring:
 app:
   cors:
     allowed-origins: http://localhost:5173
+  jwt:
+    # 测试专用密钥（>=32 字节），与任何环境无关
+    secret: patchme-test-jwt-secret-please-never-use-in-prod-0123456789
+    access-ttl: 1h

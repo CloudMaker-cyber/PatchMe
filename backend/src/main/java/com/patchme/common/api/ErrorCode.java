@@ -13,6 +13,7 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "40100", "请先登录"),
     FORBIDDEN(HttpStatus.FORBIDDEN, "40300", "没有权限执行该操作"),
     NOT_FOUND(HttpStatus.NOT_FOUND, "40400", "资源不存在"),
+    CONFLICT(HttpStatus.CONFLICT, "40900", "资源冲突"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "50000", "服务暂时不可用，请稍后重试");
 
     private final HttpStatus httpStatus;
