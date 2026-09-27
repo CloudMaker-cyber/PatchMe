@@ -13,6 +13,9 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      # 本机 JVM 使用东八区：让 DEFAULT CURRENT_TIMESTAMP 与应用侧 LocalDateTime.now() 同钟，
+      # 否则限流窗口计数与相对时间展示都会偏移 8 小时。
+      - --default-time-zone=+08:00
     ports:
       - "${DB_PORT:-3306}:3306"
     volumes:

@@ -38,10 +38,11 @@ public class MeController {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已失效，请重新登录");
         }
         UserProfileEntity profile = profileMapper.selectById(user.getId());
-        return ApiResponse.success(new MeVO(user.getId(), profile.getUsername(), profile.getNickname(), user.getRole()));
+        return ApiResponse.success(new MeVO(user.getId(), profile.getUsername(), profile.getNickname(),
+                user.getRole(), user.getStatus()));
     }
 
-    /** 仅返回给本人：自己的 id 对自己不是秘密；email/密码哈希仍不出现在此 VO。 */
-    public record MeVO(Long userId, String username, String nickname, String role) {
+    /** 仅返回给本人：自己的 id/状态对自己不是秘密；email/密码哈希仍不出现在此 VO。 */
+    public record MeVO(Long userId, String username, String nickname, String role, String status) {
     }
 }

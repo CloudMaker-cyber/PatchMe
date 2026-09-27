@@ -32,8 +32,10 @@ public class UserContentController {
     }
 
     @GetMapping("/api/users/{username}")
-    public ApiResponse<UserService.ProfilePageVO> profile(@PathVariable String username) {
-        return ApiResponse.success(userService.profile(username));
+    public ApiResponse<UserService.ProfilePageVO> profile(@PathVariable String username,
+                                                          @AuthenticationPrincipal LoginUser loginUser) {
+        // 公开页游客可看（viewerId=null 不过滤）；登录者带 JWT 时拉黑过滤生效
+        return ApiResponse.success(userService.profile(username, loginUser == null ? null : loginUser.userId()));
     }
 
     @GetMapping("/api/me/posts")

@@ -26,6 +26,8 @@ export interface Post {
   /** 回复数（含未展示统计），mock 内由 db 计算 */
   replyCount: number
   supportCount: number
+  /** 存在待处理的风险求助线索：只提示、不代表违规，也不携带任何审核细节 */
+  riskHint: boolean
 }
 
 export interface Reply {
@@ -72,14 +74,26 @@ export interface ProfileSummary {
 
 /**
  * 通知（仅本人可见）。REPLY 类型的 payload 只有公开 id 与摘要，
- * 匿名回复的通知也不携带回复者任何信息；type 预留任务 5 的三类。
+ * 匿名回复的通知也不携带回复者任何信息；任务 5 起三类审核通知复用同一出口：
+ * MODERATION 带处置动作与原因、REPORT 带举报单终态、SECURITY 只有一句话文案。
  */
 export interface AppNotification {
   id: string
   type: 'REPLY' | 'MODERATION' | 'REPORT' | 'SECURITY'
-  postId: string
+  /** 仅 REPLY 类型有值：可深链回帖子详情 */
+  postId: string | null
   replyId: string | null
   excerpt: string
+  /** MODERATION：处置动作展示文案（如"封禁"） */
+  action?: string
+  /** MODERATION：管理员填写的原因（可能被截断） */
+  reason?: string
+  /** REPORT：举报单 id */
+  reportId?: string
+  /** REPORT：处理结果展示文案（如"已确认违规"） */
+  status?: string
+  /** SECURITY：安全事件文案 */
+  message?: string
   read: boolean
   createdAt: string
 }
@@ -89,4 +103,69 @@ export interface UserSettings {
   defaultIdentityMode: IdentityMode
   replyNotificationEnabled: boolean
   historyEnabled: boolean
+}
+
+// ---------- 任务 5：举报 / 拉黑 / 账号状态 ----------
+
+export type ReportTargetType = 'POST' | 'REPLY'
+
+/** 举报原因固定五种（docs/v3/01），前端只做展示映射，用户不可自造 */
+export type ReportReason = 'HARASSMENT' | 'SPAM' | 'PRIVACY' | 'DANGER' | 'OTHER'
+
+/** 我的举报记录项：进度只到状态粒度，无管理员身份/结论说明 */
+export interface MyReport {
+  id: string
+  targetType: ReportTargetType
+  targetId: string
+  reason: ReportReason
+  reasonDisplay: string
+  status: 'PENDING' | 'CONFIRMED' | 'REJECTED'
+  statusDisplay: string
+  createdAt: string
+}
+
+/** 拉黑列表项：能进列表的都是当初以公开身份出现的账户 */
+export interface BlockUser {
+  userId: string
+  username: string
+  nickname: string
+  avatarUrl: string | null
+}
+
+/** 账号状态：RESTRICTED/BANNED 会实际拦截发布；BANNED 连登录都不允许 */
+export type AccountStatus = 'NORMAL' | 'WARNED' | 'OBSERVED' | 'RESTRICTED' | 'BANNED'
+
+// ---------- 任务 5：审核后台（仅 ADMIN 路由出现，普通用户接口永不返回这些形状） ----------
+
+export type ModerationLadderAction = 'WARN' | 'OBSERVE' | 'RESTRICT' | 'BAN' | 'UNBAN'
+
+export interface AdminReportItem {
+  id: string
+  source: 'USER' | 'SYSTEM'
+  targetType: ReportTargetType
+  targetId: string
+  reason: ReportReason
+  reasonDisplay: string
+  note: string
+  status: 'PENDING' | 'CONFIRMED' | 'REJECTED'
+  statusDisplay: string
+  createdAt: string
+  targetTitle: string | null
+  targetExcerpt: string | null
+  /** 仅管理端可见的作者内部 id（普通用户任何出口都没有它） */
+  authorId: string
+  authorIdentityMode: IdentityMode
+}
+
+export interface AdminAuditItem {
+  id: string
+  adminUsername: string
+  action: string
+  actionDisplay: string
+  targetType: string
+  targetId: string
+  targetUsername: string | null
+  reason: string
+  reportId: string | null
+  createdAt: string
 }

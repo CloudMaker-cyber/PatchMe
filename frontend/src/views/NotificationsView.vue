@@ -31,6 +31,20 @@ async function onReadAll() {
 }
 
 onMounted(load)
+
+/** 只有 REPLY 类型携带 postId 可深链；审核/安全类通知是账号级消息，没有目标内容 */
+function notificationText(n: AppNotification): string {
+  switch (n.type) {
+    case 'REPLY':
+      return `有人回复了你的帖子：${n.excerpt || '（无摘要）'}`
+    case 'MODERATION':
+      return `你的账号被处理：${n.action ?? '未知动作'}${n.reason ? `。原因：${n.reason}` : ''}`
+    case 'REPORT':
+      return `你提交的举报已处理完成，结果：${n.status ?? '已完成'}`
+    case 'SECURITY':
+      return n.message || '账号安全提醒'
+  }
+}
 </script>
 
 <template>
@@ -52,12 +66,14 @@ onMounted(load)
 
     <ul v-else-if="notifications.length" class="notifications__list card">
       <li v-for="n in notifications" :key="n.id" class="notifications__item">
-        <RouterLink :to="`/posts/${n.postId}`" class="notifications__link">
+        <RouterLink v-if="n.postId" :to="`/posts/${n.postId}`" class="notifications__link">
           <span class="notifications__dot" :class="{ 'notifications__dot--unread': !n.read }" />
-          <span class="notifications__text">
-            有人回复了你的帖子：{{ n.excerpt || '（无摘要）' }}
-          </span>
+          <span class="notifications__text">{{ notificationText(n) }}</span>
         </RouterLink>
+        <div v-else class="notifications__link">
+          <span class="notifications__dot" :class="{ 'notifications__dot--unread': !n.read }" />
+          <span class="notifications__text">{{ notificationText(n) }}</span>
+        </div>
         <span class="muted notifications__time">{{ relativeTime(n.createdAt) }}</span>
       </li>
     </ul>

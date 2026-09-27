@@ -54,10 +54,10 @@ class UserContentControllerTest {
     @Test
     void profilePageExposesOnlyPublicShapedContent() throws Exception {
         PublicPostVO post = new PublicPostVO(1L, AuthorView.publicAuthor("xiaoman", "小满", null),
-                "VENT", "t", "b", List.of(), LocalDateTime.now(), false, 0L, 0L);
+                "VENT", "t", "b", List.of(), LocalDateTime.now(), false, 0L, 0L, false);
         PublicReplyVO reply = new PublicReplyVO(2L, 1L, AuthorView.publicAuthor("xiaoman", "小满", null),
                 "r", LocalDateTime.now(), false);
-        when(userService.profile("xiaoman")).thenReturn(new UserService.ProfilePageVO(
+        when(userService.profile("xiaoman", null)).thenReturn(new UserService.ProfilePageVO(
                 new UserService.ProfileVO("xiaoman", "小满", null, "bio"), List.of(post), List.of(reply)));
 
         mockMvc.perform(get("/api/users/xiaoman"))
@@ -71,7 +71,7 @@ class UserContentControllerTest {
 
     @Test
     void unknownUserIsNotFound() throws Exception {
-        when(userService.profile(eq("ghost")))
+        when(userService.profile(eq("ghost"), any()))
                 .thenThrow(new BusinessException(ErrorCode.NOT_FOUND, "用户不存在"));
         mockMvc.perform(get("/api/users/ghost"))
                 .andExpect(status().isNotFound())
@@ -93,7 +93,7 @@ class UserContentControllerTest {
     void bookmarksReturnPublicVo() throws Exception {
         when(userService.myBookmarks(7L)).thenReturn(List.of(new PublicPostVO(
                 3L, AuthorView.anonymous(), "VENT", "t", "b", List.of(),
-                LocalDateTime.now(), false, 0L, 0L)));
+                LocalDateTime.now(), false, 0L, 0L, false)));
         mockMvc.perform(get("/api/me/bookmarks").with(MvcAuth.user(7L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].author.mode").value("anonymous"));
@@ -103,7 +103,7 @@ class UserContentControllerTest {
     void historyListUsesPublicShape() throws Exception {
         when(userService.myHistory(7L)).thenReturn(List.of(new PublicPostVO(
                 3L, AuthorView.anonymous(), "VENT", "t", "b", List.of(),
-                LocalDateTime.now(), false, 0L, 0L)));
+                LocalDateTime.now(), false, 0L, 0L, false)));
         mockMvc.perform(get("/api/me/history").with(MvcAuth.user(7L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].author.mode").value("anonymous"))

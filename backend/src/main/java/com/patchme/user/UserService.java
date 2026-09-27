@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.patchme.common.api.ErrorCode;
 import com.patchme.common.enums.IdentityMode;
 import com.patchme.common.exception.BusinessException;
+import com.patchme.moderation.BlockService;
 import com.patchme.post.mapper.PostMapper;
 import com.patchme.post.PostService;
 import com.patchme.post.vo.MinePostVO;
@@ -41,14 +42,17 @@ public class UserService {
     private final PostMapper postMapper;
     private final ReplyMapper replyMapper;
     private final PostService postService;
+    private final BlockService blockService;
 
     public UserService(UserProfileMapper profileMapper, UserSettingsMapper settingsMapper,
-                       PostMapper postMapper, ReplyMapper replyMapper, PostService postService) {
+                       PostMapper postMapper, ReplyMapper replyMapper, PostService postService,
+                       BlockService blockService) {
         this.profileMapper = profileMapper;
         this.settingsMapper = settingsMapper;
         this.postMapper = postMapper;
         this.replyMapper = replyMapper;
         this.postService = postService;
+        this.blockService = blockService;
     }
 
     public record ProfileVO(String username, String nickname, String avatarUrl, String bio) {
@@ -61,14 +65,19 @@ public class UserService {
     public record SettingsVO(String defaultIdentityMode, boolean replyNotificationEnabled, boolean historyEnabled) {
     }
 
-    /** 公开主页：只可能看到 PUBLIC 且未删除的内容。 */
-    public ProfilePageVO profile(String username) {
+    /** 公开主页：只可能看到 PUBLIC 且未删除的内容；访问者拉黑过对方时静默为空（双向沉默，不暴露拉黑）。 */
+    public ProfilePageVO profile(String username, Long viewerId) {
         UserProfileEntity profile = profileMapper.selectOne(
                 Wrappers.<UserProfileEntity>lambdaQuery().eq(UserProfileEntity::getUsername, username));
         if (profile == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
         }
-        List<PostRow> postRows = postMapper.selectRowsByAuthor(profile.getUserId(), true, PAGE_LIMIT);
+        if (viewerId != null && blockService.isBlocking(viewerId, profile.getUserId())) {
+            return new ProfilePageVO(
+                    new ProfileVO(profile.getUsername(), profile.getNickname(), profile.getAvatarUrl(), profile.getBio()),
+                    List.of(), List.of());
+        }
+        List<PostRow> postRows = postMapper.selectRowsByAuthor(profile.getUserId(), true, PAGE_LIMIT, viewerId);
         Map<Long, List<Long>> tags = postService.tagsOf(postRows.stream().map(PostRow::getId).toList());
         List<PublicPostVO> posts = postRows.stream()
                 .map(r -> PostVoMapper.toPublicVO(r, tags.getOrDefault(r.getId(), List.of()))).toList();
@@ -81,7 +90,7 @@ public class UserService {
 
     /** 我的帖子（含本人为匿名发布的内容，带 identityMode 供本人区分）。 */
     public List<MinePostVO> minePosts(Long userId) {
-        List<PostRow> rows = postMapper.selectRowsByAuthor(userId, false, PAGE_LIMIT);
+        List<PostRow> rows = postMapper.selectRowsByAuthor(userId, false, PAGE_LIMIT, null);
         Map<Long, List<Long>> tags = postService.tagsOf(rows.stream().map(PostRow::getId).toList());
         return rows.stream().map(r -> PostVoMapper.toMineVO(r, tags.getOrDefault(r.getId(), List.of()))).toList();
     }

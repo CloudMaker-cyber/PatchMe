@@ -31,7 +31,8 @@ public final class PostVoMapper {
                 row.getCreatedAt(),
                 row.getCommentsClosedAt() != null,
                 row.getReplyCount() == null ? 0 : row.getReplyCount(),
-                row.getSupportCount() == null ? 0 : row.getSupportCount());
+                row.getSupportCount() == null ? 0 : row.getSupportCount(),
+                Boolean.TRUE.equals(row.getRiskHint()));
     }
 
     /** "我的内容"专用：本人可见自己的 identityMode，但同样不带 authorId。 */

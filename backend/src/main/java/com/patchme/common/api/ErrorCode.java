@@ -14,6 +14,7 @@ public enum ErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "40300", "没有权限执行该操作"),
     NOT_FOUND(HttpStatus.NOT_FOUND, "40400", "资源不存在"),
     CONFLICT(HttpStatus.CONFLICT, "40900", "资源冲突"),
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "42900", "操作太频繁，请稍后再试"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "50000", "服务暂时不可用，请稍后重试");
 
     private final HttpStatus httpStatus;

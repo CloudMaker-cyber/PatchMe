@@ -23,8 +23,17 @@ public interface PostMapper extends BaseMapper<PostEntity> {
             (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id AND r.deleted_at IS NULL) AS reply_count,
             (SELECT COUNT(*) FROM post_supports s WHERE s.post_id = p.id) AS support_count,
             EXISTS(SELECT 1 FROM replies rh WHERE rh.post_id = p.id AND rh.deleted_at IS NULL
-                   AND rh.is_helpful = 1) AS helpful
+                   AND rh.is_helpful = 1) AS helpful,
+            EXISTS(SELECT 1 FROM reports rs WHERE rs.target_type = 'POST' AND rs.target_id = p.id
+                   AND rs.status = 'PENDING' AND rs.reason = 'DANGER') AS risk_hint
             """;
+
+    /**
+     * 拉黑只遮蔽"对方以公开身份发布"的内容；匿名帖不可被拉黑也不因此消失（01：对公开身份账户生效）。
+     * viewerId 为 null（游客）时整段不拼接。
+     */
+    String NOT_BLOCKED = "<if test=\"viewerId != null\">AND NOT (p.identity_mode = 'PUBLIC' AND EXISTS"
+            + " (SELECT 1 FROM blocks b WHERE b.blocker_id = #{viewerId} AND b.blocked_id = p.author_id))</if>";
 
     /**
      * 首页流：resolved=false 取"待回答+待帮助"（待回答在前，同组发布早优先），
@@ -34,6 +43,7 @@ public interface PostMapper extends BaseMapper<PostEntity> {
             FROM posts p
             LEFT JOIN user_profiles up ON up.user_id = p.author_id AND p.identity_mode = 'PUBLIC'
             WHERE p.deleted_at IS NULL AND p.status = 'NORMAL'
+            """ + NOT_BLOCKED + """
             <if test="schoolId != null">AND p.school_id = #{schoolId}</if>
             <if test="majorId != null">AND p.major_id = #{majorId}</if>
             <if test="intent != null">AND p.intent = #{intent}</if>
@@ -60,15 +70,18 @@ public interface PostMapper extends BaseMapper<PostEntity> {
                              @Param("intent") String intent,
                              @Param("tagIds") List<Long> tagIds,
                              @Param("resolved") boolean resolved,
-                             @Param("limit") int limit);
+                             @Param("limit") int limit,
+                             @Param("viewerId") Long viewerId);
 
-    /** 详情投影；不存在或已删除返回 null。 */
-    @Select("SELECT " + PUBLIC_COLUMNS + """
+    /** 详情投影；不存在、已删除或对当前读者拉黑屏蔽时返回 null（拉黑=双向沉默，404 不透露原因）。 */
+    @Select("<script>SELECT " + PUBLIC_COLUMNS + """
             FROM posts p
             LEFT JOIN user_profiles up ON up.user_id = p.author_id AND p.identity_mode = 'PUBLIC'
             WHERE p.id = #{id} AND p.deleted_at IS NULL AND p.status = 'NORMAL'
+            """ + NOT_BLOCKED + """
+            </script>
             """)
-    PostRow selectRowById(@Param("id") Long id);
+    PostRow selectRowById(@Param("id") Long id, @Param("viewerId") Long viewerId);
 
     /** 某人主页/我的列表。publicOnly=true 用于公开主页（匿名永不现身）；false 用于"我的"。 */
     @Select("<script>SELECT " + PUBLIC_COLUMNS + """
@@ -76,20 +89,24 @@ public interface PostMapper extends BaseMapper<PostEntity> {
             LEFT JOIN user_profiles up ON up.user_id = p.author_id AND p.identity_mode = 'PUBLIC'
             WHERE p.author_id = #{authorId} AND p.deleted_at IS NULL AND p.status = 'NORMAL'
             <if test="publicOnly">AND p.identity_mode = 'PUBLIC'</if>
+            """ + NOT_BLOCKED + """
             ORDER BY p.created_at DESC
             LIMIT #{limit}
             </script>
             """)
     List<PostRow> selectRowsByAuthor(@Param("authorId") Long authorId,
                                      @Param("publicOnly") boolean publicOnly,
-                                     @Param("limit") int limit);
+                                     @Param("limit") int limit,
+                                     @Param("viewerId") Long viewerId);
 
-    /** 我的收藏（仅本人查询入口存在）。 */
+    /** 我的收藏（仅本人查询入口存在）：被拉黑作者的公开内容同样不再出现。 */
     @Select("SELECT " + PUBLIC_COLUMNS + """
             FROM posts p
             JOIN bookmarks bk ON bk.post_id = p.id AND bk.user_id = #{userId}
             LEFT JOIN user_profiles up ON up.user_id = p.author_id AND p.identity_mode = 'PUBLIC'
             WHERE p.deleted_at IS NULL AND p.status = 'NORMAL'
+            AND NOT (p.identity_mode = 'PUBLIC' AND EXISTS
+                 (SELECT 1 FROM blocks b WHERE b.blocker_id = #{userId} AND b.blocked_id = p.author_id))
             ORDER BY bk.created_at DESC
             LIMIT #{limit}
             """)
@@ -101,6 +118,8 @@ public interface PostMapper extends BaseMapper<PostEntity> {
             JOIN posts p ON p.id = bh.post_id
             LEFT JOIN user_profiles up ON up.user_id = p.author_id AND p.identity_mode = 'PUBLIC'
             WHERE bh.user_id = #{userId} AND p.deleted_at IS NULL AND p.status = 'NORMAL'
+            AND NOT (p.identity_mode = 'PUBLIC' AND EXISTS
+                 (SELECT 1 FROM blocks b WHERE b.blocker_id = #{userId} AND b.blocked_id = p.author_id))
             ORDER BY bh.viewed_at DESC
             LIMIT #{limit}
             """)

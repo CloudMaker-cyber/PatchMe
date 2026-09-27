@@ -22,6 +22,7 @@ async function onLogout() {
           <RouterLink :to="`/u/${auth.user.username}`">{{ auth.user.nickname }}</RouterLink>
           <RouterLink to="/me">我的</RouterLink>
           <RouterLink to="/notifications">通知</RouterLink>
+          <RouterLink v-if="auth.isAdmin" to="/admin">审核后台</RouterLink>
           <a href="#" @click.prevent="onLogout">退出</a>
         </template>
         <template v-else>

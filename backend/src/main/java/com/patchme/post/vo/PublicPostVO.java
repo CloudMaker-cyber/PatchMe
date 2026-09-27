@@ -15,6 +15,8 @@ public record PublicPostVO(
         LocalDateTime createdAt,
         boolean commentsClosed,
         long replyCount,
-        long supportCount
+        long supportCount,
+        /** 任务5：存在待处理的风险送审线索时提示读者提供善意帮助（不代表违规，不含任何审核细节） */
+        boolean riskHint
 ) {
 }

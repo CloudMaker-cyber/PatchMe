@@ -44,6 +44,14 @@ class ReplyServiceTest {
     private UserSettingsMapper settingsMapper;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private com.patchme.moderation.BlockService blockService;
+    @Mock
+    private com.patchme.moderation.RateLimitService rateLimitService;
+    @Mock
+    private com.patchme.moderation.ReportService reportService;
+    @Mock
+    private com.patchme.moderation.RiskDetector riskDetector;
 
     @InjectMocks
     private ReplyService replyService;

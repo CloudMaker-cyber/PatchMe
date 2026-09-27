@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import type { IdentityMode, Post, Reply, UserSettings } from '@/types'
+import type { AccountStatus, BlockUser, IdentityMode, MyReport, Post, Reply, UserSettings } from '@/types'
 import {
   clearHistory,
   deletePost,
   deleteReply,
   fetchHistory,
   fetchMine,
+  fetchMyBlocks,
+  fetchMyReports,
   fetchSettings,
   makePostAnonymous,
   makeReplyAnonymous,
+  unblockUser,
   updateSettings,
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -19,7 +22,16 @@ import { relativeTime } from '@/utils/time'
 import AuthorDisplay from '@/components/AuthorDisplay.vue'
 import PostCard from '@/components/PostCard.vue'
 
-type Tab = 'posts' | 'replies' | 'bookmarks' | 'history' | 'settings'
+type Tab = 'posts' | 'replies' | 'bookmarks' | 'history' | 'blocks' | 'reports' | 'settings'
+
+/** 状态展示文案与后端 UserStatus.display() 对齐；NORMAL 不显示横幅 */
+const statusLabels: Record<AccountStatus, string> = {
+  NORMAL: '正常',
+  WARNED: '已提醒',
+  OBSERVED: '观察中',
+  RESTRICTED: '发布受限',
+  BANNED: '已封禁',
+}
 
 const auth = useAuthStore()
 const tab = ref<Tab>('posts')
@@ -30,8 +42,21 @@ const myReplies = ref<Reply[]>([])
 const bookmarks = ref<Post[]>([])
 const history = ref<Post[]>([])
 const historyLoading = ref(false)
+const blocks = ref<BlockUser[]>([])
+const blocksLoading = ref(false)
+const reports = ref<MyReport[]>([])
+const reportsLoading = ref(false)
 const settings = ref<UserSettings | null>(null)
 const settingsLoading = ref(false)
+
+/** 状态横幅只在 WARNED 及以上出现；WARNED/OBSERVED 不拦截，仅提醒 */
+const restrictedBanner = computed(() => {
+  const status = auth.user?.status
+  if (!status || status === 'NORMAL') return ''
+  if (status === 'RESTRICTED') return '账号处于「发布受限」状态：暂时不能发帖、回复或举报。请查看通知里的原因。'
+  if (status === 'BANNED') return '账号已被封禁，无法发布内容。如有异议请通过通知里的方式联系管理员。'
+  return `账号状态：${statusLabels[status]}。不影响使用，但请留意后续通知。`
+})
 
 onMounted(async () => {
   void useDictStore().ensureLoaded()
@@ -70,6 +95,35 @@ async function openTab(t: Tab) {
     } finally {
       settingsLoading.value = false
     }
+  }
+  if (t === 'blocks' && blocks.value.length === 0) {
+    blocksLoading.value = true
+    try {
+      blocks.value = await fetchMyBlocks()
+    } catch (e) {
+      actionError.value = e instanceof Error ? e.message : '加载失败'
+    } finally {
+      blocksLoading.value = false
+    }
+  }
+  if (t === 'reports' && reports.value.length === 0) {
+    reportsLoading.value = true
+    try {
+      reports.value = await fetchMyReports()
+    } catch (e) {
+      actionError.value = e instanceof Error ? e.message : '加载失败'
+    } finally {
+      reportsLoading.value = false
+    }
+  }
+}
+
+async function onUnblock(username: string) {
+  try {
+    await unblockUser(username)
+    blocks.value = blocks.value.filter((b) => b.username !== username)
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : '操作失败'
   }
 }
 
@@ -154,6 +208,10 @@ async function onAnonReply(id: string) {
       </p>
     </header>
 
+    <p v-if="restrictedBanner" class="me__status-banner" :class="{ 'me__status-banner--banned': auth.user?.status === 'BANNED' }">
+      {{ restrictedBanner }}
+    </p>
+
     <nav class="me__tabs">
       <button class="chip" :class="{ 'chip--active': tab === 'posts' }" @click="openTab('posts')">
         我的帖子（{{ myPosts.length }}）
@@ -166,6 +224,12 @@ async function onAnonReply(id: string) {
       </button>
       <button class="chip" :class="{ 'chip--active': tab === 'history' }" @click="openTab('history')">
         浏览历史
+      </button>
+      <button class="chip" :class="{ 'chip--active': tab === 'blocks' }" @click="openTab('blocks')">
+        拉黑管理
+      </button>
+      <button class="chip" :class="{ 'chip--active': tab === 'reports' }" @click="openTab('reports')">
+        举报记录
       </button>
       <button class="chip" :class="{ 'chip--active': tab === 'settings' }" @click="openTab('settings')">
         账号设置
@@ -220,6 +284,41 @@ async function onAnonReply(id: string) {
         </div>
         <PostCard v-for="p in history" :key="p.id" :post="p" />
         <p v-if="history.length === 0" class="empty">还没有浏览记录。</p>
+      </template>
+    </template>
+
+    <template v-else-if="tab === 'blocks'">
+      <p v-if="blocksLoading" class="empty">加载中…</p>
+      <template v-else>
+        <ul class="reply-list card">
+          <li v-for="b in blocks" :key="b.userId" class="reply-list__item">
+            <div class="reply-list__meta">
+              <RouterLink :to="`/u/${b.username}`">{{ b.nickname }}（@{{ b.username }}）</RouterLink>
+              <button class="btn reply-list__anon" @click="onUnblock(b.username)">取消拉黑</button>
+            </div>
+            <p class="muted">拉黑后你不会再看到 TA 以公开身份发布的内容。</p>
+          </li>
+        </ul>
+        <p v-if="blocks.length === 0" class="empty">没有拉黑过任何人。</p>
+      </template>
+    </template>
+
+    <template v-else-if="tab === 'reports'">
+      <p v-if="reportsLoading" class="empty">加载中…</p>
+      <template v-else>
+        <ul class="reply-list card">
+          <li v-for="r in reports" :key="r.id" class="reply-list__item">
+            <div class="reply-list__meta">
+              <RouterLink :to="`/posts/${r.targetId}`">{{ r.targetType === 'POST' ? '查看被举报帖子' : '查看被举报回复所在帖' }}</RouterLink>
+              <span class="muted">{{ r.reasonDisplay }}</span>
+              <span class="reply-list__status" :class="{ 'reply-list__status--pending': r.status === 'PENDING' }">
+                {{ r.statusDisplay }}
+              </span>
+              <span class="muted">{{ relativeTime(r.createdAt) }}</span>
+            </div>
+          </li>
+        </ul>
+        <p v-if="reports.length === 0" class="empty">还没有提交过举报。在帖子或回复下方点「举报」即可提交。</p>
       </template>
     </template>
 
@@ -286,6 +385,32 @@ async function onAnonReply(id: string) {
   padding: 0.5rem 0.8rem;
   font-size: 0.85rem;
   cursor: pointer;
+}
+
+.me__status-banner {
+  background: #fff8e1;
+  border: 1px solid #f0d48a;
+  color: #7a5c00;
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.me__status-banner--banned {
+  background: #fdecea;
+  border-color: #e8b4ae;
+  color: #c62828;
+}
+
+.reply-list__status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.reply-list__status--pending {
+  color: #b26a00;
 }
 
 /* 卡片列表项：删除按钮放在卡片外，避开整卡 stretched-link 覆盖层 */

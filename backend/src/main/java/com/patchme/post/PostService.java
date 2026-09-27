@@ -3,7 +3,9 @@ package com.patchme.post;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.patchme.auth.LoginUser;
 import com.patchme.common.api.ErrorCode;
+import com.patchme.common.enums.GuardedAction;
 import com.patchme.common.enums.IdentityMode;
+import com.patchme.common.enums.ReportTargetType;
 import com.patchme.common.exception.BusinessException;
 import com.patchme.dict.MajorEntity;
 import com.patchme.dict.MajorMapper;
@@ -12,6 +14,9 @@ import com.patchme.dict.SchoolMapper;
 import com.patchme.dict.TagEntity;
 import com.patchme.dict.TagMapper;
 import com.patchme.interaction.HistoryService;
+import com.patchme.moderation.RateLimitService;
+import com.patchme.moderation.ReportService;
+import com.patchme.moderation.RiskDetector;
 import com.patchme.interaction.mapper.BookmarkMapper;
 import com.patchme.interaction.mapper.PostSupportMapper;
 import com.patchme.interaction.entity.BookmarkEntity;
@@ -57,11 +62,16 @@ public class PostService {
     private final TagMapper tagMapper;
     private final UserSettingsMapper settingsMapper;
     private final HistoryService historyService;
+    private final RateLimitService rateLimitService;
+    private final ReportService reportService;
+    private final RiskDetector riskDetector;
 
     public PostService(PostMapper postMapper, PostTagMapper postTagMapper, ReplyMapper replyMapper,
                        PostSupportMapper supportMapper, BookmarkMapper bookmarkMapper,
                        SchoolMapper schoolMapper, MajorMapper majorMapper, TagMapper tagMapper,
-                       UserSettingsMapper settingsMapper, HistoryService historyService) {
+                       UserSettingsMapper settingsMapper, HistoryService historyService,
+                       RateLimitService rateLimitService, ReportService reportService,
+                       RiskDetector riskDetector) {
         this.postMapper = postMapper;
         this.postTagMapper = postTagMapper;
         this.replyMapper = replyMapper;
@@ -72,25 +82,28 @@ public class PostService {
         this.tagMapper = tagMapper;
         this.settingsMapper = settingsMapper;
         this.historyService = historyService;
+        this.rateLimitService = rateLimitService;
+        this.reportService = reportService;
+        this.riskDetector = riskDetector;
     }
 
-    /** 首页流/筛选：bucket 与排序全部在 SQL 内完成，这里只做投影转换。 */
+    /** 首页流/筛选：bucket 与排序全部在 SQL 内完成，这里只做投影转换。viewerId 用于拉黑过滤（可空=游客）。 */
     public List<PublicPostVO> feed(Long schoolId, Long majorId, String intent, List<Long> tagIds,
-                                   boolean resolved, int limit) {
-        List<PostRow> rows = postMapper.selectFeed(schoolId, majorId, intent, tagIds, resolved, clampLimit(limit));
+                                   boolean resolved, int limit, Long viewerId) {
+        List<PostRow> rows = postMapper.selectFeed(schoolId, majorId, intent, tagIds, resolved, clampLimit(limit), viewerId);
         Map<Long, List<Long>> tags = tagsOf(rows.stream().map(PostRow::getId).toList());
         return rows.stream().map(r -> PostVoMapper.toPublicVO(r, tags.getOrDefault(r.getId(), List.of()))).toList();
     }
 
     /** 详情：楼主/支持/收藏标记按"当前登录者"计算；游客 LoginUser 为 null，全 false。 */
     public PostDetailVO detail(Long postId, LoginUser loginUser) {
-        PostRow row = postMapper.selectRowById(postId);
+        Long uid = loginUser == null ? null : loginUser.userId();
+        PostRow row = postMapper.selectRowById(postId, uid);
         if (row == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "内容不存在或已删除");
         }
-        List<PublicReplyVO> replies = replyMapper.selectVisibleByPostId(postId).stream()
+        List<PublicReplyVO> replies = replyMapper.selectVisibleByPostId(postId, uid).stream()
                 .map(ReplyVoMapper::toPublicVO).toList();
-        Long uid = loginUser == null ? null : loginUser.userId();
         if (uid != null) {
             historyService.recordView(uid, postId);
         }
@@ -107,6 +120,7 @@ public class PostService {
     @Transactional
     public Long create(Long userId, CreatePostRequest request) {
         validateDict(request.schoolId(), request.majorId(), request.tagIds());
+        rateLimitService.check(userId, GuardedAction.POST);
         PostEntity post = new PostEntity();
         post.setAuthorId(userId);
         post.setIdentityMode(resolveIdentity(userId, request.identity()).name());
@@ -123,6 +137,10 @@ public class PostService {
             pt.setTagId(tagId);
             postTagMapper.insert(pt);
         }
+        // 风险检测：命中只生成优先审核线索（SYSTEM 单），内容照常可见——风险求助不等于违规。
+        reportService.systemFlag(ReportTargetType.POST, post.getId(),
+                riskDetector.detect(post.getTitle(), post.getBody()));
+        rateLimitService.record(userId, GuardedAction.POST);
         return post.getId();
     }
 

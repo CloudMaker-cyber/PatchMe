@@ -110,6 +110,26 @@ class SecurityChainTest {
             return "ok";
         }
 
+        @PostMapping("/api/reports")
+        public String createReport() {
+            return "ok";
+        }
+
+        @GetMapping("/api/reports/mine")
+        public String myReports() {
+            return "ok";
+        }
+
+        @PostMapping("/api/blocks")
+        public String blockUser() {
+            return "ok";
+        }
+
+        @DeleteMapping("/api/blocks/xiaoman")
+        public String unblockUser() {
+            return "ok";
+        }
+
         @GetMapping("/api/admin/ping")
         public String adminPing() {
             return "ok";
@@ -164,6 +184,19 @@ class SecurityChainTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("40100"));
         mockMvc.perform(get("/api/me/settings"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        // 任务 5 新增面：举报、拉黑全部要求登录
+        mockMvc.perform(post("/api/reports"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        mockMvc.perform(get("/api/reports/mine"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        mockMvc.perform(post("/api/blocks"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        mockMvc.perform(delete("/api/blocks/xiaoman"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("40100"));
     }

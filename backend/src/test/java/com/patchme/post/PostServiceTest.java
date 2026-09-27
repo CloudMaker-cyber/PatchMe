@@ -70,6 +70,12 @@ class PostServiceTest {
     private UserSettingsMapper settingsMapper;
     @Mock
     private HistoryService historyService;
+    @Mock
+    private com.patchme.moderation.RateLimitService rateLimitService;
+    @Mock
+    private com.patchme.moderation.ReportService reportService;
+    @Mock
+    private com.patchme.moderation.RiskDetector riskDetector;
 
     @InjectMocks
     private PostService postService;
@@ -156,11 +162,11 @@ class PostServiceTest {
 
     @Test
     void feedCollapsesAnonymousAuthors() {
-        when(postMapper.selectFeed(null, null, null, null, false, 100))
+        when(postMapper.selectFeed(null, null, null, null, false, 100, null))
                 .thenReturn(List.of(row(1L, "ANONYMOUS", null), row(2L, "PUBLIC", "xiaoman")));
         when(postTagMapper.selectList(any())).thenReturn(List.of());
 
-        List<PublicPostVO> feed = postService.feed(null, null, null, null, false, 100);
+        List<PublicPostVO> feed = postService.feed(null, null, null, null, false, 100, null);
 
         assertThat(feed).hasSize(2);
         assertThat(feed.get(0).author().mode()).isEqualTo("anonymous");
@@ -173,17 +179,17 @@ class PostServiceTest {
     @Test
     void publicModeWithoutProfileStillCollapsesToAnonymous() {
         // 防御：即使 JOIN 意外缺资料，也不允许输出半截身份
-        when(postMapper.selectFeed(null, null, null, null, false, 100))
+        when(postMapper.selectFeed(null, null, null, null, false, 100, null))
                 .thenReturn(List.of(row(1L, "PUBLIC", null)));
         when(postTagMapper.selectList(any())).thenReturn(List.of());
 
-        List<PublicPostVO> feed = postService.feed(null, null, null, null, false, 100);
+        List<PublicPostVO> feed = postService.feed(null, null, null, null, false, 100, null);
         assertThat(feed.get(0).author().mode()).isEqualTo("anonymous");
     }
 
     @Test
     void detailThrowsNotFoundForMissingPost() {
-        when(postMapper.selectRowById(404L)).thenReturn(null);
+        when(postMapper.selectRowById(404L, null)).thenReturn(null);
         assertThatThrownBy(() -> postService.detail(404L, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
@@ -192,8 +198,8 @@ class PostServiceTest {
 
     @Test
     void guestDetailFlagsAreAllFalse() {
-        when(postMapper.selectRowById(1L)).thenReturn(row(1L, "ANONYMOUS", null));
-        when(replyMapper.selectVisibleByPostId(1L)).thenReturn(List.of());
+        when(postMapper.selectRowById(1L, null)).thenReturn(row(1L, "ANONYMOUS", null));
+        when(replyMapper.selectVisibleByPostId(1L, null)).thenReturn(List.of());
         when(postTagMapper.selectList(any())).thenReturn(List.of());
 
         PostDetailVO detail = postService.detail(1L, null);
@@ -204,9 +210,9 @@ class PostServiceTest {
 
     @Test
     void detailComputesOwnerAndInteractionFlagsFromJwtUser() {
-        when(postMapper.selectRowById(1L)).thenReturn(row(1L, "ANONYMOUS", null));
+        when(postMapper.selectRowById(1L, 7L)).thenReturn(row(1L, "ANONYMOUS", null));
         when(postMapper.selectById(1L)).thenReturn(post(1L, 7L, IdentityMode.ANONYMOUS));
-        when(replyMapper.selectVisibleByPostId(1L)).thenReturn(List.of());
+        when(replyMapper.selectVisibleByPostId(1L, 7L)).thenReturn(List.of());
         when(supportMapper.exists(any())).thenReturn(true);
         when(bookmarkMapper.exists(any())).thenReturn(false);
         PostTagEntity pt = new PostTagEntity();
@@ -293,9 +299,11 @@ class PostServiceTest {
 
     @Test
     void loginDetailRecordsViewButGuestDoesNot() {
-        when(postMapper.selectRowById(1L)).thenReturn(row(1L, "ANONYMOUS", null));
+        when(postMapper.selectRowById(1L, null)).thenReturn(row(1L, "ANONYMOUS", null));
+        when(postMapper.selectRowById(1L, 7L)).thenReturn(row(1L, "ANONYMOUS", null));
         when(postMapper.selectById(1L)).thenReturn(post(1L, 7L, IdentityMode.ANONYMOUS));
-        when(replyMapper.selectVisibleByPostId(1L)).thenReturn(List.of());
+        when(replyMapper.selectVisibleByPostId(1L, null)).thenReturn(List.of());
+        when(replyMapper.selectVisibleByPostId(1L, 7L)).thenReturn(List.of());
         when(postTagMapper.selectList(any())).thenReturn(List.of());
 
         postService.detail(1L, null);

@@ -58,16 +58,24 @@ const router = createRouter({
       name: 'register',
       component: () => import('../views/RegisterView.vue'),
     },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('../views/AdminView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
   ],
 })
 
 // 需要登录的页面：先等 /api/me 回来再判定；未登录跳登录页并带回跳地址。
+// requiresAdmin 只是入口体验层（后端 /api/admin/** 才是门禁），非管理员直接踢回首页。
 router.beforeEach(async (to) => {
   if (!to.meta.requiresAuth) return true
   const auth = useAuthStore()
   await auth.ensureLoaded()
-  if (auth.isLoggedIn) return true
-  return { path: '/login', query: { redirect: to.fullPath } }
+  if (!auth.isLoggedIn) return { path: '/login', query: { redirect: to.fullPath } }
+  if (to.meta.requiresAdmin && !auth.isAdmin) return { path: '/' }
+  return true
 })
 
 export default router

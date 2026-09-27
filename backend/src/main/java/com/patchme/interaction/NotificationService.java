@@ -16,11 +16,11 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
- * 通知（仅本人可见）。任务 4 只生成 REPLY 类型；MODERATION/REPORT/SECURITY 属任务 5。
- * 生成规则（docs/v3/01）：
- * - 回复事件触发，接收者是楼主；楼主回复自己的帖子不生成；
- * - 接收者在设置里关闭回复通知（reply_notification_enabled=false）则不生成；
- * - payload 只含公开 id 与摘要文本，绝不含回复者身份——匿名回复同样只说"有人回复"。
+ * 通知（仅本人可见）。生成规则（docs/v3/01）：
+ * - 回复事件触发 REPLY，接收者是楼主；楼主回复自己的帖子不生成；
+ * - 接收者关闭回复通知（reply_notification_enabled=false）则不生成；
+ * - payload 只含公开 id 与摘要文本，绝不含回复者身份——匿名回复同样只说"有人回复"；
+ * - 任务 5：SECURITY（账号处置）与 REPORT（举报处理）不受回复开关影响，且永不携带举报人线索。
  */
 @Service
 public class NotificationService {
@@ -74,6 +74,45 @@ public class NotificationService {
                 .eq(NotificationEntity::getUserId, userId)
                 .isNull(NotificationEntity::getReadAt)
                 .set(NotificationEntity::getReadAt, LocalDateTime.now()));
+    }
+
+    // ---------- 任务 5：审核/风控产生的通知（不受回复通知开关约束，永不携带举报人） ----------
+
+    /**
+     * 账号被处置时通知本人（MODERATION 类型）。payload 只说"你的账号被…/原因…"，
+     * 绝不写是谁举报、依据哪条举报，避免反推举报人。
+     */
+    public void onAccountAction(Long userId, String actionDisplay, String reason) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("action", actionDisplay);
+        payload.put("reason", excerpt(reason == null ? "" : reason));
+        insert(userId, NotificationType.MODERATION, payload);
+    }
+
+    /** 举报被处理时通知举报人（REPORT 类型）：只回状态，不回管理员身份与对方内容。 */
+    public void onReportResolved(Long reporterUserId, Long reportId, String statusDisplay) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reportId", reportId);
+        payload.put("status", statusDisplay);
+        insert(reporterUserId, NotificationType.REPORT, payload);
+    }
+
+    /** 账号安全事件（如封禁/解封）通知（SECURITY 类型）。 */
+    public void onSecurity(Long userId, String message) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("message", excerpt(message));
+        insert(userId, NotificationType.SECURITY, payload);
+    }
+
+    private void insert(Long userId, NotificationType type, Map<String, Object> payload) {
+        if (userId == null) {
+            return;
+        }
+        NotificationEntity notification = new NotificationEntity();
+        notification.setUserId(userId);
+        notification.setType(type.name());
+        notification.setPayloadJson(writeJson(payload));
+        notificationMapper.insert(notification);
     }
 
     private NotificationVO toVO(NotificationEntity row) {

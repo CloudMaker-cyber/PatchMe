@@ -2,9 +2,15 @@ package com.patchme.reply;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.patchme.common.api.ErrorCode;
+import com.patchme.common.enums.GuardedAction;
 import com.patchme.common.enums.IdentityMode;
+import com.patchme.common.enums.ReportTargetType;
 import com.patchme.common.exception.BusinessException;
 import com.patchme.interaction.NotificationService;
+import com.patchme.moderation.BlockService;
+import com.patchme.moderation.RateLimitService;
+import com.patchme.moderation.ReportService;
+import com.patchme.moderation.RiskDetector;
 import com.patchme.post.PostService;
 import com.patchme.post.entity.PostEntity;
 import com.patchme.reply.dto.CreateReplyRequest;
@@ -31,13 +37,22 @@ public class ReplyService {
     private final PostService postService;
     private final UserSettingsMapper settingsMapper;
     private final NotificationService notificationService;
+    private final BlockService blockService;
+    private final RateLimitService rateLimitService;
+    private final ReportService reportService;
+    private final RiskDetector riskDetector;
 
     public ReplyService(ReplyMapper replyMapper, PostService postService, UserSettingsMapper settingsMapper,
-                        NotificationService notificationService) {
+                        NotificationService notificationService, BlockService blockService,
+                        RateLimitService rateLimitService, ReportService reportService, RiskDetector riskDetector) {
         this.replyMapper = replyMapper;
         this.postService = postService;
         this.settingsMapper = settingsMapper;
         this.notificationService = notificationService;
+        this.blockService = blockService;
+        this.rateLimitService = rateLimitService;
+        this.reportService = reportService;
+        this.riskDetector = riskDetector;
     }
 
     @Transactional
@@ -46,6 +61,11 @@ public class ReplyService {
         if (post.getCommentsClosedAt() != null) {
             throw new BusinessException(ErrorCode.PARAM_INVALID, "该帖评论已关闭");
         }
+        // 拉黑关系双向静音：任一方拉黑过另一方即不可再互相回复（404 双向沉默，不透露"被拉黑"这层信息）。
+        if (blockService.isBlocking(post.getAuthorId(), userId) || blockService.isBlocking(userId, post.getAuthorId())) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "内容不存在或已删除");
+        }
+        rateLimitService.check(userId, GuardedAction.REPLY);
         ReplyEntity reply = new ReplyEntity();
         reply.setPostId(postId);
         reply.setAuthorId(userId);
@@ -53,7 +73,9 @@ public class ReplyService {
         reply.setBody(request.body().trim());
         reply.setIsHelpful(false);
         replyMapper.insert(reply);
+        reportService.systemFlag(ReportTargetType.REPLY, reply.getId(), riskDetector.detect(reply.getBody()));
         notificationService.onReply(post.getAuthorId(), userId, postId, reply.getId(), reply.getBody());
+        rateLimitService.record(userId, GuardedAction.REPLY);
         return ReplyVoMapper.toPublicVO(replyMapper.selectRowById(reply.getId()));
     }
 

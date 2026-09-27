@@ -20,13 +20,17 @@ public interface ReplyMapper extends BaseMapper<ReplyEntity> {
             up.username, up.nickname, up.avatar_url
             """;
 
-    @Select("SELECT " + COLUMNS + """
+    /** 帖内可见回复：登录读者的拉黑过滤与帖子一致（只遮公开身份，匿名回复不可被拉黑）。 */
+    @Select("<script>SELECT " + COLUMNS + """
             FROM replies r
             LEFT JOIN user_profiles up ON up.user_id = r.author_id AND r.identity_mode = 'PUBLIC'
             WHERE r.post_id = #{postId} AND r.deleted_at IS NULL
+            <if test="viewerId != null">AND NOT (r.identity_mode = 'PUBLIC' AND EXISTS
+              (SELECT 1 FROM blocks b WHERE b.blocker_id = #{viewerId} AND b.blocked_id = r.author_id))</if>
             ORDER BY r.created_at ASC
+            </script>
             """)
-    List<ReplyRow> selectVisibleByPostId(@Param("postId") Long postId);
+    List<ReplyRow> selectVisibleByPostId(@Param("postId") Long postId, @Param("viewerId") Long viewerId);
 
     /** 单条回复的公开投影（发布成功后回给前端用）。 */
     @Select("SELECT " + COLUMNS + """

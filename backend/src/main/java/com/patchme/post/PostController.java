@@ -40,16 +40,17 @@ public class PostController {
         this.replyService = replyService;
     }
 
-    /** 首页流/筛选：resolved=true 才返回"已获得帮助"分组。 */
+    /** 首页流/筛选：resolved=true 才返回"已获得帮助"分组；登录读者的拉黑过滤由 SQL 完成。 */
     @GetMapping
     public ApiResponse<List<PublicPostVO>> feed(@RequestParam(required = false) Long school,
                                                 @RequestParam(required = false) Long major,
                                                 @RequestParam(required = false) Intent intent,
                                                 @RequestParam(required = false) List<Long> tags,
                                                 @RequestParam(defaultValue = "false") boolean resolved,
-                                                @RequestParam(defaultValue = "100") int limit) {
-        return ApiResponse.success(
-                postService.feed(school, major, intent == null ? null : intent.name(), tags, resolved, limit));
+                                                @RequestParam(defaultValue = "100") int limit,
+                                                @AuthenticationPrincipal LoginUser loginUser) {
+        return ApiResponse.success(postService.feed(school, major, intent == null ? null : intent.name(),
+                tags, resolved, limit, loginUser == null ? null : loginUser.userId()));
     }
 
     @GetMapping("/{id}")

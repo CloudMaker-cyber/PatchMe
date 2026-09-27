@@ -2,13 +2,14 @@
 import { computed, onMounted, ref, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { IdentityMode, PostDetail } from '@/types'
-import { ApiError, deletePost, fetchPostDetail, makePostAnonymous, makeReplyAnonymous, setHelpful, createReply, setCommentsClosed, toggleBookmark, toggleSupport } from '@/api'
+import { ApiError, blockUser, deletePost, fetchMyBlocks, fetchPostDetail, makePostAnonymous, makeReplyAnonymous, setHelpful, createReply, setCommentsClosed, toggleBookmark, toggleSupport, unblockUser } from '@/api'
 import { intentLabels } from '@/utils/dict'
 import { useDictStore } from '@/stores/dicts'
 import { useAuthStore } from '@/stores/auth'
 import { relativeTime } from '@/utils/time'
 import AuthorDisplay from '@/components/AuthorDisplay.vue'
 import ReplyItem from '@/components/ReplyItem.vue'
+import ReportDialog from '@/components/ReportDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -142,6 +143,62 @@ async function onMakeReplyAnonymous(replyId: string) {
     onActionError(e)
   }
 }
+
+// ---------- 任务 5：举报 / 拉黑 ----------
+
+/** 当前展开举报表单的目标：'post' 或回复 id；null 表示关闭 */
+const reportingTarget = ref<'post' | string | null>(null)
+const blockedAuthors = ref<Set<string>>(new Set())
+
+/** 公开作者的用户名；匿名作者没有可拉黑的稳定身份，返回 null */
+function publicAuthorName(): string | null {
+  return post.value?.author.mode === 'public' ? post.value.author.username : null
+}
+
+const authorBlockable = computed(() => {
+  const name = publicAuthorName()
+  return !!name && name !== auth.user?.username
+})
+const authorBlocked = computed(() => {
+  const name = publicAuthorName()
+  return !!name && blockedAuthors.value.has(name)
+})
+
+async function loadBlocks() {
+  if (!auth.isLoggedIn) return
+  try {
+    const list = await fetchMyBlocks()
+    blockedAuthors.value = new Set(list.map((b) => b.username))
+  } catch {
+    // 拉黑状态只是按钮文案，加载失败不打扰
+  }
+}
+
+onMounted(loadBlocks)
+
+async function onToggleBlock() {
+  const name = publicAuthorName()
+  if (!name) return
+  try {
+    if (blockedAuthors.value.has(name)) {
+      await unblockUser(name)
+    } else {
+      if (!window.confirm(`拉黑 @${name} 后，你将不再看到该用户以公开身份发布的内容，对方也收不到你的回复提醒。确定拉黑？`)) return
+      await blockUser(name)
+    }
+    await loadBlocks()
+  } catch (e) {
+    onActionError(e)
+  }
+}
+
+function onReportDone(message: string) {
+  reportingTarget.value = null
+  actionError.value = ''
+  notice.value = message
+}
+
+const notice = ref('')
 </script>
 
 <template>
@@ -154,6 +211,12 @@ async function onMakeReplyAnonymous(replyId: string) {
 
     <template v-else-if="post && detail">
       <p v-if="actionError" class="detail__error" @click="actionError = ''">{{ actionError }}</p>
+      <p v-if="notice" class="detail__notice" @click="notice = ''">{{ notice }}</p>
+      <p v-if="post.riskHint" class="detail__risk">
+        这条内容可能被系统标记为求助信号。它不代表违规——如果你也是这样想的，请记得
+        <RouterLink to="/rules">社区公约</RouterLink>
+        里写着：你不必独自扛着，拨打心理援助热线 12356（24 小时）或联系学校心理中心。
+      </p>
       <article class="card">
         <div class="detail__meta">
           <span class="badge badge--advice" :class="{
@@ -161,6 +224,9 @@ async function onMakeReplyAnonymous(replyId: string) {
             'badge--companion': post.intent === 'COMPANION',
           }">{{ intentLabels[post.intent] }}</span>
           <AuthorDisplay :author="post.author" />
+          <button v-if="authorBlockable" class="btn detail__block" @click="onToggleBlock">
+            {{ authorBlocked ? '取消拉黑' : '拉黑作者' }}
+          </button>
           <span class="muted">{{ relativeTime(post.createdAt) }}</span>
         </div>
         <h1 class="detail__title">{{ post.title || '（无标题）' }}</h1>
@@ -175,12 +241,23 @@ async function onMakeReplyAnonymous(replyId: string) {
           <button class="btn" :class="{ 'btn--primary': detail.bookmarkedByMe }" @click="onBookmark">
             {{ detail.bookmarkedByMe ? '已收藏' : '收藏' }}
           </button>
+          <button class="btn detail__report" @click="reportingTarget = reportingTarget === 'post' ? null : 'post'">
+            举报
+          </button>
           <button v-if="detail.isAuthorOfPost" class="btn detail__close" @click="onToggleClosed">
             {{ post.commentsClosed ? '重新开放评论' : '关闭评论' }}
           </button>
           <button v-if="canMakePostAnonymous" class="btn detail__anon" @click="onMakePostAnonymous">转为匿名</button>
           <button v-if="detail.isAuthorOfPost" class="btn detail__delete" @click="onDeletePost">删除帖子</button>
         </div>
+        <ReportDialog
+          v-if="reportingTarget === 'post'"
+          target-type="POST"
+          :target-id="post.id"
+          :target-label="post.title || post.body.slice(0, 30)"
+          @done="onReportDone"
+          @close="reportingTarget = null"
+        />
         <p v-if="detail.isAuthorOfPost" class="muted detail__author-tip">
           你是楼主：可以标记某条回复“有帮助”、关闭评论、把公开帖转为匿名或删除本帖。
         </p>
@@ -190,15 +267,24 @@ async function onMakeReplyAnonymous(replyId: string) {
         <h2>回复 {{ post.replyCount }}</h2>
         <p v-if="post.commentsClosed" class="muted">评论已被楼主关闭。</p>
         <ul v-if="detail.replies.length" class="detail__reply-list">
-          <ReplyItem
-            v-for="r in detail.replies"
-            :key="r.id"
-            :reply="r"
-            :can-mark-helpful="detail.isAuthorOfPost"
-            :can-make-anonymous="isMyPublicReply(r.id)"
-            @toggle-helpful="onToggleHelpful"
-            @make-anonymous="onMakeReplyAnonymous"
-          />
+          <template v-for="r in detail.replies" :key="r.id">
+            <ReplyItem
+              :reply="r"
+              :can-mark-helpful="detail.isAuthorOfPost"
+              :can-make-anonymous="isMyPublicReply(r.id)"
+              @toggle-helpful="onToggleHelpful"
+              @make-anonymous="onMakeReplyAnonymous"
+              @report="reportingTarget = reportingTarget === r.id ? null : r.id"
+            />
+            <ReportDialog
+              v-if="reportingTarget === r.id"
+              target-type="REPLY"
+              :target-id="r.id"
+              :target-label="r.body.slice(0, 30)"
+              @done="onReportDone"
+              @close="reportingTarget = null"
+            />
+          </template>
         </ul>
         <p v-else class="muted">还没有人回复。成为第一个支持者。</p>
 
@@ -296,6 +382,47 @@ async function onMakeReplyAnonymous(replyId: string) {
   padding: 0.5rem 0.8rem;
   font-size: 0.85rem;
   cursor: pointer;
+}
+
+.detail__notice {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* 风险求助提示：温和底色，明确"不是违规"，并给出求助出口 */
+.detail__risk {
+  background: #fff8e1;
+  border: 1px solid #f0d48a;
+  color: #7a5c00;
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  margin-bottom: 0.75rem;
+}
+
+.detail__risk a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.detail__block {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  color: var(--color-text-muted);
+}
+
+.detail__report {
+  color: var(--color-text-muted);
+}
+
+/* 回复列表内嵌的举报表单不是 li，去掉列表缩进 */
+.detail__reply-list > div {
+  padding: 0 0.4rem 0.6rem;
 }
 
 .detail__replies h2 {

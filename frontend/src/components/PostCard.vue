@@ -27,6 +27,7 @@ const intentClass = computed(
       <span class="badge" :class="intentClass">{{ intentLabels[post.intent] }}</span>
       <span v-if="status === 'UNANSWERED'" class="badge badge--unanswered">待回答</span>
       <span v-else-if="status === 'NEED_HELP'" class="badge badge--needhelp">待帮助</span>
+      <span v-if="post.riskHint" class="badge post-card__risk" title="系统识别到求助信号，已提醒管理员优先关注">求助中</span>
       <AuthorDisplay :author="post.author" />
       <span class="muted">{{ relativeTime(post.createdAt) }}</span>
     </div>
@@ -105,5 +106,11 @@ const intentClass = computed(
   border: none;
   background: transparent;
   padding: 0;
+}
+
+/* 求助提示：中性偏暖，不用违规的红色（风险求助不等于违规） */
+.post-card__risk {
+  background: #fff3e0;
+  color: #b26a00;
 }
 </style>

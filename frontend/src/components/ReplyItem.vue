@@ -11,7 +11,11 @@ defineProps<{
   canMakeAnonymous: boolean
 }>()
 
-defineEmits<{ toggleHelpful: [replyId: string]; makeAnonymous: [replyId: string] }>()
+defineEmits<{
+  toggleHelpful: [replyId: string]
+  makeAnonymous: [replyId: string]
+  report: [replyId: string]
+}>()
 </script>
 
 <template>
@@ -30,6 +34,7 @@ defineEmits<{ toggleHelpful: [replyId: string]; makeAnonymous: [replyId: string]
         class="btn reply__anon-btn"
         @click="$emit('makeAnonymous', reply.id)"
       >转为匿名</button>
+      <button class="btn reply__report-btn" @click="$emit('report', reply.id)">举报</button>
     </div>
     <p class="reply__body">{{ reply.body }}</p>
   </li>
@@ -73,14 +78,29 @@ defineEmits<{ toggleHelpful: [replyId: string]; makeAnonymous: [replyId: string]
 }
 
 .reply__anon-btn {
-  margin-left: auto;
   font-size: 0.75rem;
   padding: 0.15rem 0.55rem;
   color: #c62828;
   border-color: #e8b4ae;
 }
 
-/* 两个按钮同时出现时并排靠右，避免两个 auto 把间距撑开 */
+/* 举报按钮永远最右；有左排按钮时靠 margin-left:auto 顶过去 */
+.reply__report-btn {
+  margin-left: auto;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  color: var(--color-text-muted);
+}
+
+/* 转匿名出现时：匿名按钮接管 margin-left:auto，举报按钮紧贴其右 */
+.reply__anon-btn {
+  margin-left: auto;
+}
+
+.reply__anon-btn + .reply__report-btn {
+  margin-left: 0.4rem;
+}
+
 .reply__helpful-btn + .reply__anon-btn {
   margin-left: 0.4rem;
 }

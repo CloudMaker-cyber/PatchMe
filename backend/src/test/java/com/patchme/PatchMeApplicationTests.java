@@ -7,6 +7,11 @@ import com.patchme.interaction.mapper.BookmarkMapper;
 import com.patchme.interaction.mapper.BrowsingHistoryMapper;
 import com.patchme.interaction.mapper.NotificationMapper;
 import com.patchme.interaction.mapper.PostSupportMapper;
+import com.patchme.moderation.mapper.BlockMapper;
+import com.patchme.moderation.mapper.ModerationActionMapper;
+import com.patchme.moderation.mapper.ModerationLogMapper;
+import com.patchme.moderation.mapper.ReportMapper;
+import com.patchme.moderation.mapper.UserRestrictionMapper;
 import com.patchme.post.mapper.PostMapper;
 import com.patchme.post.mapper.PostTagMapper;
 import com.patchme.reply.mapper.ReplyMapper;
@@ -62,6 +67,21 @@ class PatchMeApplicationTests {
 
     @MockitoBean
     private TagMapper tagMapper;
+
+    @MockitoBean
+    private BlockMapper blockMapper;
+
+    @MockitoBean
+    private ReportMapper reportMapper;
+
+    @MockitoBean
+    private ModerationActionMapper moderationActionMapper;
+
+    @MockitoBean
+    private UserRestrictionMapper userRestrictionMapper;
+
+    @MockitoBean
+    private ModerationLogMapper moderationLogMapper;
 
     @Test
     void contextLoads() {

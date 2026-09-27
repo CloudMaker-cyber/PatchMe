@@ -56,12 +56,12 @@ class PostControllerTest {
 
     private static PublicPostVO anonymousPost() {
         return new PublicPostVO(1L, AuthorView.anonymous(), "ADVICE", "标题", "正文",
-                List.of(1L, 2L), LocalDateTime.now(), false, 0L, 3L);
+                List.of(1L, 2L), LocalDateTime.now(), false, 0L, 3L, false);
     }
 
     @Test
     void feedBindsFiltersAndResolvedBucket() throws Exception {
-        when(postService.feed(eq(3L), eq(5L), eq("ADVICE"), eq(List.of(1L, 2L)), eq(true), eq(100)))
+        when(postService.feed(eq(3L), eq(5L), eq("ADVICE"), eq(List.of(1L, 2L)), eq(true), eq(100), any()))
                 .thenReturn(List.of(anonymousPost()));
 
         mockMvc.perform(get("/api/posts").param("school", "3").param("major", "5")

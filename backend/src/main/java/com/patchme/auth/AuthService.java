@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.patchme.auth.dto.LoginRequest;
 import com.patchme.auth.dto.RegisterRequest;
 import com.patchme.common.api.ErrorCode;
+import com.patchme.common.enums.UserStatus;
 import com.patchme.common.exception.BusinessException;
 import com.patchme.user.entity.UserEntity;
 import com.patchme.user.entity.UserProfileEntity;
@@ -29,14 +30,17 @@ public class AuthService {
     private final UserSettingsMapper settingsMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final com.patchme.moderation.RateLimitService rateLimitService;
 
     public AuthService(UserMapper userMapper, UserProfileMapper profileMapper, UserSettingsMapper settingsMapper,
-                       PasswordEncoder passwordEncoder, JwtService jwtService) {
+                       PasswordEncoder passwordEncoder, JwtService jwtService,
+                       com.patchme.moderation.RateLimitService rateLimitService) {
         this.userMapper = userMapper;
         this.profileMapper = profileMapper;
         this.settingsMapper = settingsMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.rateLimitService = rateLimitService;
     }
 
     @Transactional
@@ -72,13 +76,18 @@ public class AuthService {
 
     /** 校验凭据并签发 JWT；返回体只带公开资料，token 由 Controller 写 Cookie。 */
     public LoginResult login(LoginRequest request) {
+        // 登录失败限流（任务5）：按小写邮箱计数，窗口内失败过多直接 429，不再继续比对密码。
+        rateLimitService.checkLoginFailure(request.email());
         UserEntity user = userMapper.selectOne(
                 Wrappers.<UserEntity>lambdaQuery().eq(UserEntity::getEmail, request.email()));
         if (user == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            rateLimitService.recordLoginFailure(request.email());
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "邮箱或密码错误");
         }
-        if (!"NORMAL".equals(user.getStatus())) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "账号当前不可用，请联系管理员");
+        // 渐进式限制（任务5）：只有 BANNED 拒绝登录；WARNED/OBSERVED 正常登录，
+        // RESTRICTED 能登录但写操作在 Service 层被 RateLimitService 拦截。
+        if (!UserStatus.valueOf(user.getStatus() == null ? "NORMAL" : user.getStatus()).allowsLogin()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "账号已被封禁，请联系管理员");
         }
         UserProfileEntity profile = profileMapper.selectById(user.getId());
         String token = jwtService.issue(user.getId(), user.getRole());

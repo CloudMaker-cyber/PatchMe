@@ -21,6 +21,7 @@ public class PostRow {
     private Long replyCount;
     private Long supportCount;
     private Boolean helpful;
+    private Boolean riskHint;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -48,4 +49,6 @@ public class PostRow {
     public void setSupportCount(Long supportCount) { this.supportCount = supportCount; }
     public Boolean getHelpful() { return helpful; }
     public void setHelpful(Boolean helpful) { this.helpful = helpful; }
+    public Boolean getRiskHint() { return riskHint; }
+    public void setRiskHint(Boolean riskHint) { this.riskHint = riskHint; }
 }

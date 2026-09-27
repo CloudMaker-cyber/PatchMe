@@ -1,15 +1,23 @@
 import axios, { type AxiosError, type AxiosResponse } from 'axios'
 import { http } from './http'
 import type {
+  AccountStatus,
+  AdminAuditItem,
+  AdminReportItem,
   AppNotification,
   AuthorInfo,
+  BlockUser,
   IdentityMode,
   Intent,
+  ModerationLadderAction,
+  MyReport,
   Post,
   PostDetail,
   PostFilters,
   ProfileSummary,
   Reply,
+  ReportReason,
+  ReportTargetType,
   UserSettings,
   DictItem,
 } from '@/types'
@@ -76,6 +84,7 @@ interface ApiPost {
   commentsClosed: boolean
   replyCount: number
   supportCount: number
+  riskHint: boolean
 }
 
 interface ApiReply {
@@ -95,7 +104,7 @@ interface ApiDetail {
   bookmarkedByMe: boolean
 }
 
-interface ApiMinePost extends Omit<ApiPost, 'author'> {
+interface ApiMinePost extends Omit<ApiPost, 'author' | 'riskHint'> {
   identityMode: IdentityMode
 }
 
@@ -139,6 +148,7 @@ function toPost(p: ApiPost): Post {
     commentsClosed: p.commentsClosed,
     replyCount: p.replyCount,
     supportCount: p.supportCount,
+    riskHint: p.riskHint,
   }
 }
 
@@ -189,8 +199,14 @@ export function logout(): Promise<void> {
   return call(() => http.post<Envelope<void>>('/auth/logout'))
 }
 
-export function fetchMe(): Promise<(AuthUser & { userId: number }) | null> {
-  return call(() => http.get<Envelope<AuthUser & { userId: number }>>('/me')).catch((e) => {
+export interface MeInfo extends AuthUser {
+  userId: number
+  /** 任务 5：账号状态（仅 /api/me 返回；登录响应没有它） */
+  status: AccountStatus
+}
+
+export function fetchMe(): Promise<MeInfo | null> {
+  return call(() => http.get<Envelope<MeInfo>>('/me')).catch((e) => {
     if (e instanceof ApiError && e.code === '40100') return null
     throw e
   })
@@ -339,6 +355,8 @@ export function fetchMine(me: {
       commentsClosed: p.commentsClosed,
       replyCount: p.replyCount,
       supportCount: p.supportCount,
+      // 我的列表出口没有 riskHint（那是公开侧的派生提示），本人内容无需提示
+      riskHint: false,
     })),
     replies: replies.map((r) => ({
       id: String(r.id),
@@ -379,9 +397,13 @@ export function makeReplyAnonymous(id: string): Promise<void> {
 interface ApiNotification {
   id: number
   type: AppNotification['type']
-  payload: { postId: number; replyId?: number | null; excerpt?: string | null }
+  payload: Record<string, unknown>
   readAt: string | null
   createdAt: string
+}
+
+function str(v: unknown): string | undefined {
+  return v == null ? undefined : String(v)
 }
 
 export function fetchNotifications(): Promise<AppNotification[]> {
@@ -389,9 +411,15 @@ export function fetchNotifications(): Promise<AppNotification[]> {
     l.map((n) => ({
       id: String(n.id),
       type: n.type,
-      postId: String(n.payload.postId),
-      replyId: n.payload.replyId == null ? null : String(n.payload.replyId),
-      excerpt: n.payload.excerpt ?? '',
+      // 四类通知 payload 键各不相同（后端 Map 出口）；缺键只会得到 undefined，不会崩
+      postId: str(n.payload.postId) ?? null,
+      replyId: str(n.payload.replyId) ?? null,
+      excerpt: str(n.payload.excerpt) ?? '',
+      action: str(n.payload.action),
+      reason: str(n.payload.reason),
+      reportId: str(n.payload.reportId),
+      status: str(n.payload.status),
+      message: str(n.payload.message),
       read: n.readAt != null,
       createdAt: n.createdAt,
     })),
@@ -425,4 +453,149 @@ export function fetchSettings(): Promise<UserSettings> {
 /** 部分更新：只传需要改的字段（与后端 PATCH 语义一致） */
 export function updateSettings(patch: Partial<UserSettings>): Promise<UserSettings> {
   return call(() => http.patch<Envelope<ApiSettings>>('/me/settings', patch))
+}
+
+// ---------- 任务 5：举报 / 拉黑（仅本人） ----------
+
+export function submitReport(input: {
+  targetType: ReportTargetType
+  targetId: string
+  reason: ReportReason
+  note?: string
+}): Promise<string> {
+  return call(() =>
+    http.post<Envelope<{ id: number }>>('/reports', {
+      targetType: input.targetType,
+      targetId: Number(input.targetId),
+      reason: input.reason,
+      note: input.note ?? '',
+    }),
+  ).then((r) => String(r.id))
+}
+
+export interface ApiMyReport {
+  id: number
+  targetType: ReportTargetType
+  targetId: number
+  reason: ReportReason
+  reasonDisplay: string
+  status: MyReport['status']
+  statusDisplay: string
+  createdAt: string
+}
+
+export function fetchMyReports(): Promise<MyReport[]> {
+  return call(() => http.get<Envelope<ApiMyReport[]>>('/reports/mine')).then((l) =>
+    l.map((r) => ({
+      id: String(r.id),
+      targetType: r.targetType,
+      targetId: String(r.targetId),
+      reason: r.reason,
+      reasonDisplay: r.reasonDisplay,
+      status: r.status,
+      statusDisplay: r.statusDisplay,
+      createdAt: r.createdAt,
+    })),
+  )
+}
+
+export function blockUser(username: string): Promise<void> {
+  return call(() => http.post<Envelope<void>>('/blocks', { username }))
+}
+
+export function unblockUser(username: string): Promise<void> {
+  return call(() => http.delete<Envelope<void>>(`/blocks/${encodeURIComponent(username)}`))
+}
+
+interface ApiBlockUser {
+  userId: number
+  username: string
+  nickname: string
+  avatarUrl: string | null
+}
+
+export function fetchMyBlocks(): Promise<BlockUser[]> {
+  return call(() => http.get<Envelope<ApiBlockUser[]>>('/blocks/mine')).then((l) =>
+    l.map((b) => ({ userId: String(b.userId), username: b.username, nickname: b.nickname, avatarUrl: b.avatarUrl })),
+  )
+}
+
+// ---------- 任务 5：审核后台（/api/admin/**，后端 SecurityConfig 已限 ADMIN；普通用户只会拿到 401/403） ----------
+
+interface ApiAdminReport {
+  id: number
+  source: 'USER' | 'SYSTEM'
+  targetType: ReportTargetType
+  targetId: number
+  reason: ReportReason
+  reasonDisplay: string
+  note: string
+  status: MyReport['status']
+  statusDisplay: string
+  createdAt: string
+  targetTitle: string | null
+  targetExcerpt: string | null
+  authorId: number
+  authorIdentityMode: IdentityMode
+}
+
+export function fetchAdminQueue(status?: string): Promise<AdminReportItem[]> {
+  return call(() => http.get<Envelope<ApiAdminReport[]>>('/admin/reports', { params: status ? { status } : {} })).then(
+    (l) =>
+      l.map((r) => ({
+        id: String(r.id),
+        source: r.source,
+        targetType: r.targetType,
+        targetId: String(r.targetId),
+        reason: r.reason,
+        reasonDisplay: r.reasonDisplay,
+        note: r.note,
+        status: r.status,
+        statusDisplay: r.statusDisplay,
+        createdAt: r.createdAt,
+        targetTitle: r.targetTitle,
+        targetExcerpt: r.targetExcerpt,
+        authorId: String(r.authorId),
+        authorIdentityMode: r.authorIdentityMode,
+      })),
+  )
+}
+
+/** confirm=核实结论；takedown 仅在确认违规时生效（软下架目标内容） */
+export function reviewReport(reportId: string, confirm: boolean, reason: string, takedown: boolean): Promise<void> {
+  return call(() => http.post<Envelope<void>>(`/admin/reports/${reportId}/review`, { confirm, reason, takedown }))
+}
+
+export function moderateUser(action: ModerationLadderAction, targetUserId: string, reason: string): Promise<void> {
+  return call(() => http.post<Envelope<void>>('/admin/actions', { action, targetUserId: Number(targetUserId), reason }))
+}
+
+interface ApiAuditItem {
+  id: number
+  adminUsername: string
+  action: string
+  actionDisplay: string
+  targetType: string
+  targetId: number
+  targetUsername: string | null
+  reason: string
+  reportId: number | null
+  createdAt: string
+}
+
+export function fetchAdminAudit(): Promise<AdminAuditItem[]> {
+  return call(() => http.get<Envelope<ApiAuditItem[]>>('/admin/audit')).then((l) =>
+    l.map((a) => ({
+      id: String(a.id),
+      adminUsername: a.adminUsername,
+      action: a.action,
+      actionDisplay: a.actionDisplay,
+      targetType: a.targetType,
+      targetId: String(a.targetId),
+      targetUsername: a.targetUsername,
+      reason: a.reason,
+      reportId: a.reportId == null ? null : String(a.reportId),
+      createdAt: a.createdAt,
+    })),
+  )
 }
