@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.patchme.common.api.ErrorCode;
 import com.patchme.common.enums.IdentityMode;
 import com.patchme.common.exception.BusinessException;
+import com.patchme.interaction.NotificationService;
 import com.patchme.post.PostService;
 import com.patchme.post.entity.PostEntity;
 import com.patchme.reply.dto.CreateReplyRequest;
@@ -13,6 +14,7 @@ import com.patchme.reply.vo.PublicReplyVO;
 import com.patchme.reply.vo.ReplyVoMapper;
 import com.patchme.user.entity.UserSettingsEntity;
 import com.patchme.user.mapper.UserSettingsMapper;
+import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,13 +30,17 @@ public class ReplyService {
     private final ReplyMapper replyMapper;
     private final PostService postService;
     private final UserSettingsMapper settingsMapper;
+    private final NotificationService notificationService;
 
-    public ReplyService(ReplyMapper replyMapper, PostService postService, UserSettingsMapper settingsMapper) {
+    public ReplyService(ReplyMapper replyMapper, PostService postService, UserSettingsMapper settingsMapper,
+                        NotificationService notificationService) {
         this.replyMapper = replyMapper;
         this.postService = postService;
         this.settingsMapper = settingsMapper;
+        this.notificationService = notificationService;
     }
 
+    @Transactional
     public PublicReplyVO create(Long userId, Long postId, CreateReplyRequest request) {
         PostEntity post = postService.requireVisiblePost(postId);
         if (post.getCommentsClosedAt() != null) {
@@ -47,7 +53,18 @@ public class ReplyService {
         reply.setBody(request.body().trim());
         reply.setIsHelpful(false);
         replyMapper.insert(reply);
+        notificationService.onReply(post.getAuthorId(), userId, postId, reply.getId(), reply.getBody());
         return ReplyVoMapper.toPublicVO(replyMapper.selectRowById(reply.getId()));
+    }
+
+    /** 作者本人删除自己的回复：软删除。 */
+    public void deleteReply(Long userId, Long replyId) {
+        ReplyEntity reply = requireVisibleReply(replyId);
+        if (!reply.getAuthorId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只有作者可以删除该回复");
+        }
+        reply.setDeletedAt(LocalDateTime.now());
+        replyMapper.updateById(reply);
     }
 
     /** 楼主标记/取消"有帮助"。非楼主 403；标记新的自动取消旧的。 */

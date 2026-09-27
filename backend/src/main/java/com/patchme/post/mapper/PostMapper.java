@@ -94,4 +94,15 @@ public interface PostMapper extends BaseMapper<PostEntity> {
             LIMIT #{limit}
             """)
     List<PostRow> selectBookmarkedRows(@Param("userId") Long userId, @Param("limit") int limit);
+
+    /** 浏览历史（仅本人查询入口存在）：按最近浏览时间倒序，复用公开投影，已删除的帖自然消失。 */
+    @Select("SELECT " + PUBLIC_COLUMNS + """
+            FROM browsing_history bh
+            JOIN posts p ON p.id = bh.post_id
+            LEFT JOIN user_profiles up ON up.user_id = p.author_id AND p.identity_mode = 'PUBLIC'
+            WHERE bh.user_id = #{userId} AND p.deleted_at IS NULL AND p.status = 'NORMAL'
+            ORDER BY bh.viewed_at DESC
+            LIMIT #{limit}
+            """)
+    List<PostRow> selectHistoryRows(@Param("userId") Long userId, @Param("limit") int limit);
 }

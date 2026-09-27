@@ -2,14 +2,18 @@ package com.patchme.user;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.patchme.common.api.ErrorCode;
 import com.patchme.common.exception.BusinessException;
 import com.patchme.common.vo.AuthorView;
+import com.patchme.interaction.HistoryService;
 import com.patchme.post.vo.MinePostVO;
 import com.patchme.post.vo.PublicPostVO;
 import com.patchme.reply.vo.PublicReplyVO;
@@ -21,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -37,6 +42,9 @@ class UserContentControllerTest {
 
     @MockitoBean
     private UserService userService;
+
+    @MockitoBean
+    private HistoryService historyService;
 
     @AfterEach
     void clearAuth() {
@@ -89,5 +97,42 @@ class UserContentControllerTest {
         mockMvc.perform(get("/api/me/bookmarks").with(MvcAuth.user(7L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].author.mode").value("anonymous"));
+    }
+
+    @Test
+    void historyListUsesPublicShape() throws Exception {
+        when(userService.myHistory(7L)).thenReturn(List.of(new PublicPostVO(
+                3L, AuthorView.anonymous(), "VENT", "t", "b", List.of(),
+                LocalDateTime.now(), false, 0L, 0L)));
+        mockMvc.perform(get("/api/me/history").with(MvcAuth.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].author.mode").value("anonymous"))
+                .andExpect(jsonPath("$..authorId").doesNotExist())
+                .andExpect(jsonPath("$..userId").doesNotExist());
+    }
+
+    @Test
+    void historyClearGoesToHistoryService() throws Exception {
+        mockMvc.perform(delete("/api/me/history").with(MvcAuth.user(7L)))
+                .andExpect(status().isOk());
+        verify(historyService).clear(7L);
+    }
+
+    @Test
+    void settingsRoundTripCarriesNoInternalFields() throws Exception {
+        when(userService.getSettings(7L)).thenReturn(new UserService.SettingsVO("ANONYMOUS", true, false));
+        mockMvc.perform(get("/api/me/settings").with(MvcAuth.user(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.defaultIdentityMode").value("ANONYMOUS"))
+                .andExpect(jsonPath("$.data.historyEnabled").value(false))
+                .andExpect(jsonPath("$..userId").doesNotExist());
+
+        when(userService.updateSettings(eq(7L), any()))
+                .thenReturn(new UserService.SettingsVO("PUBLIC", true, true));
+        mockMvc.perform(patch("/api/me/settings").with(MvcAuth.user(7L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"historyEnabled\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.defaultIdentityMode").value("PUBLIC"));
     }
 }

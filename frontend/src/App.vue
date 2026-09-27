@@ -21,6 +21,7 @@ async function onLogout() {
         <template v-if="auth.isLoggedIn && auth.user">
           <RouterLink :to="`/u/${auth.user.username}`">{{ auth.user.nickname }}</RouterLink>
           <RouterLink to="/me">我的</RouterLink>
+          <RouterLink to="/notifications">通知</RouterLink>
           <a href="#" @click.prevent="onLogout">退出</a>
         </template>
         <template v-else>
@@ -34,6 +35,14 @@ async function onLogout() {
   <main class="app-main">
     <RouterView />
   </main>
+
+  <footer class="app-footer">
+    <RouterLink to="/privacy">隐私说明</RouterLink>
+    <span class="app-footer__sep">·</span>
+    <RouterLink to="/rules">社区公约</RouterLink>
+    <span class="app-footer__sep">·</span>
+    <span>匿名是这里的底线：发布出去的每一句话，都由你自己决定说多少。</span>
+  </footer>
 </template>
 
 <style scoped>
@@ -77,5 +86,24 @@ async function onLogout() {
   max-width: 720px;
   margin: 0 auto;
   padding: 1rem;
+}
+
+.app-footer {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1rem 1rem 1.5rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.8;
+}
+
+.app-footer a {
+  color: var(--color-text-muted);
+}
+
+.app-footer__sep {
+  margin: 0 0.35rem;
 }
 </style>

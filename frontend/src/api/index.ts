@@ -1,6 +1,7 @@
 import axios, { type AxiosError, type AxiosResponse } from 'axios'
 import { http } from './http'
 import type {
+  AppNotification,
   AuthorInfo,
   IdentityMode,
   Intent,
@@ -9,6 +10,7 @@ import type {
   PostFilters,
   ProfileSummary,
   Reply,
+  UserSettings,
   DictItem,
 } from '@/types'
 
@@ -348,4 +350,79 @@ export function fetchMine(me: {
     })),
     bookmarks: bookmarks.map(toPost),
   }))
+}
+
+// ---------- 删除（软删除，成功后内容即刻从所有公开出口消失） ----------
+
+export function deletePost(id: string): Promise<void> {
+  return call(() => http.delete<Envelope<void>>(`/posts/${id}`))
+}
+
+export function deleteReply(id: string): Promise<void> {
+  return call(() => http.delete<Envelope<void>>(`/replies/${id}`))
+}
+
+// ---------- 公开转匿名（单向：匿名内容永不可再转公开，由后端闸门保证） ----------
+
+/** 楼主将自己的公开帖转匿名：成功后立即从公开主页消失 */
+export function makePostAnonymous(id: string): Promise<void> {
+  return call(() => http.patch<Envelope<void>>(`/posts/${id}/identity`, { mode: 'ANONYMOUS' }))
+}
+
+/** 作者将自己的公开回复转匿名 */
+export function makeReplyAnonymous(id: string): Promise<void> {
+  return call(() => http.patch<Envelope<void>>(`/replies/${id}/identity`, { mode: 'ANONYMOUS' }))
+}
+
+// ---------- 通知（仅本人） ----------
+
+interface ApiNotification {
+  id: number
+  type: AppNotification['type']
+  payload: { postId: number; replyId?: number | null; excerpt?: string | null }
+  readAt: string | null
+  createdAt: string
+}
+
+export function fetchNotifications(): Promise<AppNotification[]> {
+  return call(() => http.get<Envelope<ApiNotification[]>>('/notifications')).then((l) =>
+    l.map((n) => ({
+      id: String(n.id),
+      type: n.type,
+      postId: String(n.payload.postId),
+      replyId: n.payload.replyId == null ? null : String(n.payload.replyId),
+      excerpt: n.payload.excerpt ?? '',
+      read: n.readAt != null,
+      createdAt: n.createdAt,
+    })),
+  )
+}
+
+export function markNotificationsRead(): Promise<void> {
+  return call(() => http.patch<Envelope<void>>('/notifications/read'))
+}
+
+// ---------- 浏览历史与账号设置（仅本人） ----------
+
+export function fetchHistory(): Promise<Post[]> {
+  return call(() => http.get<Envelope<ApiPost[]>>('/me/history')).then((l) => l.map(toPost))
+}
+
+export function clearHistory(): Promise<void> {
+  return call(() => http.delete<Envelope<void>>('/me/history'))
+}
+
+interface ApiSettings {
+  defaultIdentityMode: IdentityMode
+  replyNotificationEnabled: boolean
+  historyEnabled: boolean
+}
+
+export function fetchSettings(): Promise<UserSettings> {
+  return call(() => http.get<Envelope<ApiSettings>>('/me/settings'))
+}
+
+/** 部分更新：只传需要改的字段（与后端 PATCH 语义一致） */
+export function updateSettings(patch: Partial<UserSettings>): Promise<UserSettings> {
+  return call(() => http.patch<Envelope<ApiSettings>>('/me/settings', patch))
 }

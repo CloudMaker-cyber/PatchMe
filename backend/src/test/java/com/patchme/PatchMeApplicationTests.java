@@ -4,6 +4,8 @@ import com.patchme.dict.MajorMapper;
 import com.patchme.dict.SchoolMapper;
 import com.patchme.dict.TagMapper;
 import com.patchme.interaction.mapper.BookmarkMapper;
+import com.patchme.interaction.mapper.BrowsingHistoryMapper;
+import com.patchme.interaction.mapper.NotificationMapper;
 import com.patchme.interaction.mapper.PostSupportMapper;
 import com.patchme.post.mapper.PostMapper;
 import com.patchme.post.mapper.PostTagMapper;
@@ -45,6 +47,12 @@ class PatchMeApplicationTests {
 
     @MockitoBean
     private BookmarkMapper bookmarkMapper;
+
+    @MockitoBean
+    private BrowsingHistoryMapper browsingHistoryMapper;
+
+    @MockitoBean
+    private NotificationMapper notificationMapper;
 
     @MockitoBean
     private SchoolMapper schoolMapper;

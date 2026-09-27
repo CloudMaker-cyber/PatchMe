@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.patchme.common.api.ErrorCode;
 import com.patchme.common.enums.IdentityMode;
 import com.patchme.common.exception.BusinessException;
+import com.patchme.interaction.NotificationService;
 import com.patchme.post.PostService;
 import com.patchme.post.entity.PostEntity;
 import com.patchme.reply.dto.CreateReplyRequest;
@@ -41,6 +42,8 @@ class ReplyServiceTest {
     private PostService postService;
     @Mock
     private UserSettingsMapper settingsMapper;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private ReplyService replyService;
@@ -180,5 +183,53 @@ class ReplyServiceTest {
         ArgumentCaptor<ReplyEntity> captor = ArgumentCaptor.forClass(ReplyEntity.class);
         verify(replyMapper).updateById(captor.capture());
         assertThat(captor.getValue().getIdentityMode()).isEqualTo("ANONYMOUS");
+    }
+
+    @Test
+    void createNotifiesPostAuthor() {
+        when(postService.requireVisiblePost(1L)).thenReturn(post(1L, 9L, false));
+        when(replyMapper.insert(any(ReplyEntity.class))).thenAnswer(inv -> {
+            inv.getArgument(0, ReplyEntity.class).setId(50L);
+            return 1;
+        });
+        com.patchme.reply.vo.ReplyRow row = new com.patchme.reply.vo.ReplyRow();
+        row.setId(50L);
+        row.setPostId(1L);
+        row.setBody("hi");
+        row.setIdentityMode("ANONYMOUS");
+        row.setIsHelpful(false);
+        row.setCreatedAt(LocalDateTime.now());
+        when(replyMapper.selectRowById(50L)).thenReturn(row);
+
+        replyService.create(7L, 1L, new CreateReplyRequest("hi", IdentityMode.ANONYMOUS));
+
+        verify(notificationService).onReply(9L, 7L, 1L, 50L, "hi");
+    }
+
+    @Test
+    void onlyReplyAuthorMayDelete() {
+        when(replyMapper.selectById(2L)).thenReturn(reply(2L, 1L, 8L, IdentityMode.ANONYMOUS, false));
+        assertThatThrownBy(() -> replyService.deleteReply(7L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("只有作者可以删除该回复");
+        verify(replyMapper, never()).updateById(any(ReplyEntity.class));
+    }
+
+    @Test
+    void authorDeleteIsSoft() {
+        when(replyMapper.selectById(2L)).thenReturn(reply(2L, 1L, 7L, IdentityMode.ANONYMOUS, false));
+        replyService.deleteReply(7L, 2L);
+        ArgumentCaptor<ReplyEntity> captor = ArgumentCaptor.forClass(ReplyEntity.class);
+        verify(replyMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    void deleteMissingReplyIs404() {
+        when(replyMapper.selectById(404L)).thenReturn(null);
+        assertThatThrownBy(() -> replyService.deleteReply(7L, 404L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOT_FOUND);
     }
 }

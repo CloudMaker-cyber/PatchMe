@@ -14,6 +14,7 @@ import com.patchme.reply.vo.PublicReplyVO;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -68,6 +69,13 @@ public class PostController {
                                             @PathVariable Long id,
                                             @Valid @RequestBody CreateReplyRequest request) {
         return ApiResponse.success(replyService.create(loginUser.userId(), id, request));
+    }
+
+    /** 楼主删除帖子（软删除）：删除后详情/首页/主页/分享链接均不再出现原文。 */
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@AuthenticationPrincipal LoginUser loginUser, @PathVariable Long id) {
+        postService.deletePost(loginUser.userId(), id);
+        return ApiResponse.success(null);
     }
 
     /** 楼主开关评论。 */

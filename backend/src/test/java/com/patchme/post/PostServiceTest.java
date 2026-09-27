@@ -16,6 +16,7 @@ import com.patchme.dict.MajorMapper;
 import com.patchme.dict.SchoolMapper;
 import com.patchme.dict.TagEntity;
 import com.patchme.dict.TagMapper;
+import com.patchme.interaction.HistoryService;
 import com.patchme.interaction.entity.BookmarkEntity;
 import com.patchme.interaction.entity.PostSupportEntity;
 import com.patchme.interaction.mapper.BookmarkMapper;
@@ -67,6 +68,8 @@ class PostServiceTest {
     private TagMapper tagMapper;
     @Mock
     private UserSettingsMapper settingsMapper;
+    @Mock
+    private HistoryService historyService;
 
     @InjectMocks
     private PostService postService;
@@ -266,5 +269,39 @@ class PostServiceTest {
         when(postMapper.selectById(1L)).thenReturn(post(1L, 7L, IdentityMode.PUBLIC));
         postService.changeIdentity(7L, 1L, IdentityMode.PUBLIC);
         verify(postMapper, never()).updateById(any(PostEntity.class));
+    }
+
+    @Test
+    void onlyOwnerMayDeletePost() {
+        when(postMapper.selectById(1L)).thenReturn(post(1L, 8L, IdentityMode.ANONYMOUS));
+        assertThatThrownBy(() -> postService.deletePost(7L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("只有楼主可以执行该操作");
+        verify(postMapper, never()).updateById(any(PostEntity.class));
+    }
+
+    @Test
+    void ownerDeleteIsSoft() {
+        when(postMapper.selectById(1L)).thenReturn(post(1L, 7L, IdentityMode.ANONYMOUS));
+        postService.deletePost(7L, 1L);
+        ArgumentCaptor<PostEntity> captor = ArgumentCaptor.forClass(PostEntity.class);
+        verify(postMapper).updateById(captor.capture());
+        // 软删除：行保留、只写 deleted_at（满足匿名不可逆承诺的审计需要）
+        assertThat(captor.getValue().getDeletedAt()).isNotNull();
+        assertThat(captor.getValue().getId()).isEqualTo(1L);
+    }
+
+    @Test
+    void loginDetailRecordsViewButGuestDoesNot() {
+        when(postMapper.selectRowById(1L)).thenReturn(row(1L, "ANONYMOUS", null));
+        when(postMapper.selectById(1L)).thenReturn(post(1L, 7L, IdentityMode.ANONYMOUS));
+        when(replyMapper.selectVisibleByPostId(1L)).thenReturn(List.of());
+        when(postTagMapper.selectList(any())).thenReturn(List.of());
+
+        postService.detail(1L, null);
+        verify(historyService, never()).recordView(any(), any());
+
+        postService.detail(1L, new LoginUser(7L, "USER"));
+        verify(historyService).recordView(7L, 1L);
     }
 }

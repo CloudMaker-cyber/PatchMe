@@ -11,6 +11,7 @@ import com.patchme.dict.SchoolEntity;
 import com.patchme.dict.SchoolMapper;
 import com.patchme.dict.TagEntity;
 import com.patchme.dict.TagMapper;
+import com.patchme.interaction.HistoryService;
 import com.patchme.interaction.mapper.BookmarkMapper;
 import com.patchme.interaction.mapper.PostSupportMapper;
 import com.patchme.interaction.entity.BookmarkEntity;
@@ -55,11 +56,12 @@ public class PostService {
     private final MajorMapper majorMapper;
     private final TagMapper tagMapper;
     private final UserSettingsMapper settingsMapper;
+    private final HistoryService historyService;
 
     public PostService(PostMapper postMapper, PostTagMapper postTagMapper, ReplyMapper replyMapper,
                        PostSupportMapper supportMapper, BookmarkMapper bookmarkMapper,
                        SchoolMapper schoolMapper, MajorMapper majorMapper, TagMapper tagMapper,
-                       UserSettingsMapper settingsMapper) {
+                       UserSettingsMapper settingsMapper, HistoryService historyService) {
         this.postMapper = postMapper;
         this.postTagMapper = postTagMapper;
         this.replyMapper = replyMapper;
@@ -69,6 +71,7 @@ public class PostService {
         this.majorMapper = majorMapper;
         this.tagMapper = tagMapper;
         this.settingsMapper = settingsMapper;
+        this.historyService = historyService;
     }
 
     /** 首页流/筛选：bucket 与排序全部在 SQL 内完成，这里只做投影转换。 */
@@ -88,6 +91,9 @@ public class PostService {
         List<PublicReplyVO> replies = replyMapper.selectVisibleByPostId(postId).stream()
                 .map(ReplyVoMapper::toPublicVO).toList();
         Long uid = loginUser == null ? null : loginUser.userId();
+        if (uid != null) {
+            historyService.recordView(uid, postId);
+        }
         return new PostDetailVO(
                 PostVoMapper.toPublicVO(row, tagIdsOf(postId)),
                 replies,
@@ -124,6 +130,13 @@ public class PostService {
     public void setCommentsClosed(Long userId, Long postId, boolean closed) {
         PostEntity post = requireOwned(postId, userId);
         post.setCommentsClosedAt(closed ? LocalDateTime.now() : null);
+        postMapper.updateById(post);
+    }
+
+    /** 楼主删除帖子：软删除（只写 deleted_at，行保留以满足匿名承诺的不可逆审计）。 */
+    public void deletePost(Long userId, Long postId) {
+        PostEntity post = requireOwned(postId, userId);
+        post.setDeletedAt(LocalDateTime.now());
         postMapper.updateById(post);
     }
 

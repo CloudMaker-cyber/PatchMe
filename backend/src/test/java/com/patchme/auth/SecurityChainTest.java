@@ -2,6 +2,7 @@ package com.patchme.auth;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,6 +23,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -83,6 +85,31 @@ class SecurityChainTest {
             return "ok";
         }
 
+        @DeleteMapping("/api/posts/{id}")
+        public String deletePost() {
+            return "ok";
+        }
+
+        @DeleteMapping("/api/replies/{id}")
+        public String deleteReply() {
+            return "ok";
+        }
+
+        @GetMapping("/api/notifications")
+        public String notifications() {
+            return "ok";
+        }
+
+        @GetMapping("/api/me/history")
+        public String myHistory() {
+            return "ok";
+        }
+
+        @GetMapping("/api/me/settings")
+        public String mySettings() {
+            return "ok";
+        }
+
         @GetMapping("/api/admin/ping")
         public String adminPing() {
             return "ok";
@@ -121,6 +148,22 @@ class SecurityChainTest {
                 .andExpect(jsonPath("$.code").value("40100"));
         // 楼主操作（PATCH）也必须登录
         mockMvc.perform(patch("/api/posts/1/comments"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        // 任务 4 新增面：删除、通知、历史、设置全部要求登录
+        mockMvc.perform(delete("/api/posts/1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        mockMvc.perform(delete("/api/replies/1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        mockMvc.perform(get("/api/notifications"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        mockMvc.perform(get("/api/me/history"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("40100"));
+        mockMvc.perform(get("/api/me/settings"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("40100"));
     }

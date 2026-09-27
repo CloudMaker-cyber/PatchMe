@@ -6,6 +6,7 @@ import com.patchme.common.dto.IdentityRequest;
 import com.patchme.reply.dto.HelpfulRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,6 +22,13 @@ public class ReplyController {
 
     public ReplyController(ReplyService replyService) {
         this.replyService = replyService;
+    }
+
+    /** 作者本人删除自己的回复（软删除）。 */
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@AuthenticationPrincipal LoginUser loginUser, @PathVariable Long id) {
+        replyService.deleteReply(loginUser.userId(), id);
+        return ApiResponse.success(null);
     }
 
     @PatchMapping("/{id}/helpful")

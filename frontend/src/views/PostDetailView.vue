@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { IdentityMode, PostDetail } from '@/types'
-import { ApiError, fetchPostDetail, setHelpful, createReply, setCommentsClosed, toggleBookmark, toggleSupport } from '@/api'
+import { ApiError, deletePost, fetchPostDetail, makePostAnonymous, makeReplyAnonymous, setHelpful, createReply, setCommentsClosed, toggleBookmark, toggleSupport } from '@/api'
 import { intentLabels } from '@/utils/dict'
 import { useDictStore } from '@/stores/dicts'
 import { useAuthStore } from '@/stores/auth'
@@ -100,6 +100,48 @@ async function onReply() {
     onActionError(e)
   }
 }
+
+async function onDeletePost() {
+  if (!post.value) return
+  if (!window.confirm('删除后该帖将从首页、主页与分享链接中消失，且无法恢复。确定删除？')) return
+  try {
+    await deletePost(post.value.id)
+    await router.push({ name: 'home' })
+  } catch (e) {
+    onActionError(e)
+  }
+}
+
+/** 楼主的公开帖可转匿名（单向：转后从公开主页消失，且永不可再转回公开） */
+const canMakePostAnonymous = computed(() => !!detail.value?.isAuthorOfPost && post.value?.author.mode === 'public')
+
+async function onMakePostAnonymous() {
+  if (!post.value) return
+  if (!window.confirm('转为匿名后，该帖将立即从你的公开主页消失，且此后不可再改回公开。确定转为匿名？')) return
+  try {
+    await makePostAnonymous(post.value.id)
+    await load()
+  } catch (e) {
+    onActionError(e)
+  }
+}
+
+/** 该回复是否是我本人发布的公开回复（匿名回复无 username，天然不匹配） */
+function isMyPublicReply(replyId: string): boolean {
+  const me = auth.user
+  const r = detail.value?.replies.find((x) => x.id === replyId)
+  return !!me && !!r && r.author.mode === 'public' && r.author.username === me.username
+}
+
+async function onMakeReplyAnonymous(replyId: string) {
+  if (!window.confirm('转为匿名后，该回复将立即从公开主页消失，且此后不可再改回公开。确定转为匿名？')) return
+  try {
+    await makeReplyAnonymous(replyId)
+    await load()
+  } catch (e) {
+    onActionError(e)
+  }
+}
 </script>
 
 <template>
@@ -136,9 +178,11 @@ async function onReply() {
           <button v-if="detail.isAuthorOfPost" class="btn detail__close" @click="onToggleClosed">
             {{ post.commentsClosed ? '重新开放评论' : '关闭评论' }}
           </button>
+          <button v-if="canMakePostAnonymous" class="btn detail__anon" @click="onMakePostAnonymous">转为匿名</button>
+          <button v-if="detail.isAuthorOfPost" class="btn detail__delete" @click="onDeletePost">删除帖子</button>
         </div>
         <p v-if="detail.isAuthorOfPost" class="muted detail__author-tip">
-          你是楼主：可以标记某条回复“有帮助”，或关闭评论。
+          你是楼主：可以标记某条回复“有帮助”、关闭评论、把公开帖转为匿名或删除本帖。
         </p>
       </article>
 
@@ -151,7 +195,9 @@ async function onReply() {
             :key="r.id"
             :reply="r"
             :can-mark-helpful="detail.isAuthorOfPost"
+            :can-make-anonymous="isMyPublicReply(r.id)"
             @toggle-helpful="onToggleHelpful"
+            @make-anonymous="onMakeReplyAnonymous"
           />
         </ul>
         <p v-else class="muted">还没有人回复。成为第一个支持者。</p>
@@ -222,6 +268,16 @@ async function onReply() {
 
 .detail__close {
   margin-left: auto;
+}
+
+.detail__delete {
+  color: #c62828;
+  border-color: #e8b4ae;
+}
+
+.detail__anon {
+  color: #c62828;
+  border-color: #e8b4ae;
 }
 
 .detail__author-tip {

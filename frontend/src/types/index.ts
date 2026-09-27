@@ -69,3 +69,24 @@ export interface ProfileSummary {
   avatarUrl: string | null
   bio: string
 }
+
+/**
+ * 通知（仅本人可见）。REPLY 类型的 payload 只有公开 id 与摘要，
+ * 匿名回复的通知也不携带回复者任何信息；type 预留任务 5 的三类。
+ */
+export interface AppNotification {
+  id: string
+  type: 'REPLY' | 'MODERATION' | 'REPORT' | 'SECURITY'
+  postId: string
+  replyId: string | null
+  excerpt: string
+  read: boolean
+  createdAt: string
+}
+
+/** 账号设置（GET/PATCH /api/me/settings 的出口形状） */
+export interface UserSettings {
+  defaultIdentityMode: IdentityMode
+  replyNotificationEnabled: boolean
+  historyEnabled: boolean
+}
