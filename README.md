@@ -15,7 +15,7 @@
 | 后端 | Java 21 + Spring Boot 3.5.x + Spring Security（任务 2）+ JWT |
 | 数据访问 | MyBatis-Plus + Flyway |
 | 数据库 | MySQL 8 |
-| 部署 | Docker Compose 起步，后期迁移自有服务器 |
+| 部署 | Docker Compose 起步（生产见 `docs/deploy-production.md`），后期迁移自有服务器 |
 
 前后端分离的单体架构：`Vue 前端 → REST/JSON → Spring Boot → MySQL`。
 
@@ -54,7 +54,7 @@ cd frontend && npm install && npm run dev
 ## 验收命令
 
 ```bash
-cd backend  && mvn test && mvn package   # 后端测试与构建
+cd backend  && mvn test && mvn package   # 后端测试与构建（Testcontainers 集成测试需 Docker 运行，无 Docker 自动跳过）
 cd frontend && npm run lint && npm run build   # 前端检查与构建
 ```
 

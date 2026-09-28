@@ -53,6 +53,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/dicts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts/**", "/api/users/**").permitAll()
+                        // Swagger 只在开发/内测 profile 提供服务；生产 profile 关闭 springdoc 后这里仅剩 404
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e

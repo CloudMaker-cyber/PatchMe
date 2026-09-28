@@ -1,0 +1,70 @@
+# 生产/内测部署栈（任务 6）：MySQL + 后端(production profile) + nginx 前端。
+# 用法与前置检查见 docs/deploy-production.md。密钥全部来自服务器上的 .env，不进镜像、不进 Git。
+# 与开发栈 docker-compose.yml 互不影响：独立项目名与独立卷。
+name: patchme-prod
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?请在服务器 .env 中设置 DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:?请在服务器 .env 中设置 DB_NAME}
+      MYSQL_USER: ${DB_USERNAME:?请在服务器 .env 中设置 DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?请在服务器 .env 中设置 DB_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # 与后端容器 TZ 同为东八区：限流窗口依赖 CURRENT_TIMESTAMP 与 LocalDateTime.now() 同钟
+      - --default-time-zone=+08:00
+    volumes:
+      - patchme_prod_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      TZ: Asia/Shanghai
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?请在服务器 .env 中设置 JWT_SECRET（与开发环境必须是不同的高熵值）}
+      # 生产 CORS 只允许真实前端源；同源部署（nginx 反代 /api）时甚至可留空收紧
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:?请在服务器 .env 中设置 APP_CORS_ORIGINS}
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-true}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-2h}
+      LOG_DIR: /app/logs
+    volumes:
+      - patchme_prod_logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health | grep -q '\"code\":\"0\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      # 直连 80 仅用于申请证书/临时验证；正式对外走外层 TLS 反代（见部署文档第 3 步）
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  patchme_prod_mysql_data:
+  patchme_prod_logs:

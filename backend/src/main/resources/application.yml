@@ -23,6 +23,9 @@ app:
     # 密钥只从环境变量注入；HS256 要求至少 32 字节
     secret: ${JWT_SECRET}
     access-ttl: 2h
+  cookie:
+    # 本机 http 开发默认 false；prod profile 下默认 true（HTTPS）
+    secure: ${APP_COOKIE_SECURE:false}
 
 logging:
   level:
